@@ -1,48 +1,35 @@
-# Запуск в Yandex Cloud — пошагово
+# Запуск в Google Cloud Run — пошагово
 
-Токены и ключи вводятся только в BotFather, Notion, Yandex Cloud и в секреты GitHub — никогда в чат и не в код.
-Команды `yc` выполняются в [Cloud Shell](https://console.yandex.cloud) или локально после `yc init`.
+Токены и ключи вводятся только в BotFather, Notion, Google Cloud и в секреты GitHub — никогда в чат и не в код.
+
+Что получится: бот работает в Cloud Run (регион Бельгия, europe-west1), данные — в Firestore,
+раз в 10 минут Cloud Scheduler будит бота: синхронизация с Notion + сводки в 09:00, 18:00 и в пятницу.
+Каждый `git push` в `main` прогоняет тесты и сам выкладывает новую версию.
 
 ## 1. Telegram-бот
 
-1. [@BotFather](https://t.me/BotFather) → `/newbot` → имя **the Bear Lab Bot**, username **TheBearLabBot** (если занят — любой свободный).
-2. Сохрани токен — это секрет `BOT_TOKEN`.
-3. Узнай свой Telegram id (например, у @userinfobot) — это `ADMIN_IDS`. Партнёров можно добавить через `;`: `111;222`.
-   Без `ADMIN_IDS` администратором станет первый, кто напишет боту `/start`.
+1. [@BotFather](https://t.me/BotFather) → `/newbot` → имя **the Bear Lab Bot**, username **TheBearLabBot** (если занят — любой свободный). Токен → секрет `BOT_TOKEN`.
+2. Свой Telegram id (например, у @userinfobot) → секрет `ADMIN_IDS`. Несколько — через `;`.
 
 ## 2. Notion
 
-1. [notion.so/my-integrations](https://www.notion.so/my-integrations) → New integration (Internal), рабочее пространство TheBearLab.
+1. [notion.so/my-integrations](https://www.notion.so/my-integrations) → New integration (Internal).
    Capabilities: Read content, Update content, Insert content, **Read user information without email**.
-2. Скопируй Internal Integration Secret — это `NOTION_TOKEN`.
-3. Открой страницу проекта TheBearLab → `•••` → Connections → добавь интеграцию. Доступ получат все три базы (Задачи, Вехи, Идеи).
+2. Internal Integration Secret → секрет `NOTION_TOKEN`.
+3. Страница проекта TheBearLab → `•••` → Connections → добавь интеграцию (доступ получат все три базы).
 
-## 3. Yandex Cloud
+## 3. Google Cloud
 
-```bash
-FOLDER_ID=$(yc config get folder-id)
-
-# сервисный аккаунт для функции и для GitHub Actions
-yc iam service-account create --name tbl-bot
-SA_ID=$(yc iam service-account get tbl-bot --format json | jq -r .id)
-for role in ydb.editor functions.editor iam.serviceAccounts.user serverless.functions.invoker; do
-  yc resource-manager folder add-access-binding "$FOLDER_ID" --role $role --subject serviceAccount:$SA_ID
-done
-yc iam key create --service-account-name tbl-bot -o tbl-bot-key.json   # содержимое → секрет YC_SA_KEY_JSON
-
-# база
-yc ydb database create tbl --serverless
-yc ydb database get tbl            # endpoint: grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/...
-#   YDB_ENDPOINT = grpcs://ydb.serverless.yandexcloud.net:2135
-#   YDB_DATABASE = /ru-central1/...   (часть после database=)
-
-# функция (код зальёт GitHub Actions)
-yc serverless function create --name thebearlab-bot
-yc serverless function allow-unauthenticated-invoke thebearlab-bot
-yc serverless function get thebearlab-bot     # запомни id функции
-```
-
-После загрузки ключа удали файл `tbl-bot-key.json` с диска.
+1. [console.cloud.google.com](https://console.cloud.google.com) → создай проект (например, `thebearlab`). Запомни его **ID**.
+2. Привяжи платёжный аккаунт (Billing). Без карты Cloud Run не включается, но наша нагрузка укладывается
+   в бесплатный уровень. Для спокойствия: Billing → Budgets → бюджет $1 с уведомлением на почту.
+3. Открой Cloud Shell (значок `>_` вверху справа) и выполни:
+   ```bash
+   git clone https://github.com/bergisdesign-collab/thebearlab.git
+   bash thebearlab/bot/deploy/gcp_setup.sh <ID_ПРОЕКТА>
+   ```
+   Скрипт включит нужные сервисы, создаст базу Firestore, выдаст права и создаст ключ для GitHub.
+   В конце покажет, что скопировать. После копирования ключа удали файл (команда будет в выводе).
 
 ## 4. Секреты GitHub
 
@@ -50,58 +37,45 @@ yc serverless function get thebearlab-bot     # запомни id функции
 
 | Секрет | Значение |
 |---|---|
+| `GCP_PROJECT` | ID проекта |
+| `GCP_SA_KEY` | ключ из Cloud Shell целиком |
 | `BOT_TOKEN` | токен от BotFather |
-| `WEBHOOK_SECRET` | любая строка из латиницы/цифр/`_-`, 20+ символов |
-| `ADMIN_IDS` | твой Telegram id (через `;` для нескольких) |
 | `NOTION_TOKEN` | секрет интеграции Notion |
-| `YDB_ENDPOINT`, `YDB_DATABASE` | из шага 3 |
-| `YC_SA_KEY_JSON` | всё содержимое `tbl-bot-key.json` |
-| `YC_FOLDER_ID` | id каталога |
-| `YC_SERVICE_ACCOUNT_ID` | `$SA_ID` |
-| `GH_DISPATCH_TOKEN` | необязательно: fine-grained token с правом *Actions: Read and write* на этот репозиторий — для мгновенного `/sync` |
+| `ADMIN_IDS` | твой Telegram id |
+| `WEBHOOK_SECRET` | любая строка из латиницы/цифр, 30+ символов |
+| `CRON_SECRET` | ещё одна такая строка (другая) |
 
-## 5. Первый запуск
+Случайную строку можно получить в Cloud Shell: `openssl rand -hex 24`.
 
-1. GitHub → Actions → **Bot tests & deploy** → Run workflow. Тесты + выкладка новой версии функции.
-2. Actions → **Notion sync** → Run workflow. Создаст таблицы в YDB и загрузит все задачи, вехи, идеи и пользователей Notion.
-   Дальше синхронизация идёт сама каждые 15 минут.
-3. Подготовка бота (меню команд):
-   ```bash
-   yc serverless function invoke thebearlab-bot -d '{"messages":[{"details":{"payload":"setup"}}]}'
-   ```
-4. Webhook — открой в браузере (подставь свои значения):
-   ```
-   https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://functions.yandexcloud.net/<ID_ФУНКЦИИ>&secret_token=<WEBHOOK_SECRET>
-   ```
-   Ответ `"ok":true` — бот на связи.
-5. Таймеры (время в UTC, МСК = UTC+3):
-   ```bash
-   for t in "morning|0 6 ? * * *" "evening|0 15 ? * * *" "weekly|0 15 ? * FRI *"; do
-     name=${t%%|*}; cron=${t#*|}
-     yc serverless trigger create timer --name tbl-$name --cron-expression "$cron" \
-       --invoke-function-name thebearlab-bot --invoke-function-service-account-id $SA_ID --payload $name
-   done
-   ```
+## 5. Выкладка
+
+GitHub → Actions → **Bot tests & deploy** → Run workflow. Сценарий:
+тесты → сборка и выкладка в Cloud Run → регистрация webhook в Telegram и меню команд →
+создание задания Cloud Scheduler `tbl-tick` (каждые 10 минут). Первая синхронизация с Notion пройдёт
+в течение 10 минут; можно не ждать и отправить боту `/sync`.
 
 ## 6. В Telegram
 
-1. Напиши боту `/start` — ты администратор.
+1. Напиши боту `/start` — ты администратор (если твой id в `ADMIN_IDS`).
 2. Добавь бота в общий чат команды и отправь там `/bindchat`.
 3. Партнёры пишут боту `/start` → тебе приходит заявка → «Принять».
-4. Каждый в `/team` привязывает себя к своему пользователю Notion — тогда назначения из бота видны в Notion и наоборот.
+4. Каждый в `/team` привязывает себя к своему пользователю Notion.
 
-## Как устроена синхронизация
+## Как это работает
 
-- Всё, что изменили в Notion, приходит в бота за ≤15 минут.
-- Изменения из бота уходят в Notion в ту же синхронизацию. Если одно и то же поле поменяли и там, и там
-  в одном 15-минутном окне — побеждает бот (его правка новее по смыслу и уже разослана команде).
-- Задачи, созданные в боте, появляются в Notion; удалённые в Notion — скрываются в боте.
-- Ход каждого запуска виден в GitHub → Actions → Notion sync.
+- **Синхронизация.** Изменение в боте уходит в Notion сразу после нажатия кнопки. Изменения из Notion
+  приходят в бота каждые 10 минут или по `/sync`. Если одно поле поменяли в обоих местах между
+  синхронизациями — побеждает бот.
+- **Расписание.** Задание будит бота каждые 10 минут; сводки уходят на первом «пробуждении» после
+  09:00 / 18:00 (то есть до 09:10), один раз в день.
+- **Холодный старт.** Без сообщений сервер засыпает; первый ответ после паузы приходит через 2–5 секунд,
+  дальше — мгновенно.
+- **Логи.** Cloud Console → Cloud Run → thebearlab-bot → Logs.
 
 ## Стоимость
 
-Нагрузка — сотни вызовов функции и запросов к YDB в день; обычно это укладывается в бесплатный
-уровень Yandex Cloud, но актуальные лимиты стоит проверить в тарифах Cloud Functions и YDB Serverless.
-GitHub Actions для публичного репозитория бесплатен. Если репозиторий станет приватным, синхронизация
-каждые 15 минут займёт ≈2900 минут в месяц — больше бесплатных 2000; тогда поставь cron `*/30` в
-`.github/workflows/notion-sync.yml`.
+При нашей нагрузке всё в пределах бесплатного уровня: Cloud Run (2 млн запросов/мес), Firestore
+(50 тыс. чтений и 20 тыс. записей в день — бот хранит каждый тип данных одним документом,
+поэтому тратит сотни операций в день), Cloud Scheduler (3 задания бесплатно, у нас одно).
+Единственное, что может стоить центы — хранение собранных образов в Artifact Registry сверх 0,5 ГБ;
+старые версии можно удалять в Artifact Registry → cloud-run-source-deploy.

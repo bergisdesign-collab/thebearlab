@@ -1,15 +1,15 @@
 # the Bear Lab Bot (@TheBearLabBot)
 
 Telegram-штурман по роадмапу запуска TheBearLab. Источник правды — Notion (задачи, вехи, идеи),
-у бота своя база (YDB), две стороны синхронизируются каждые 15 минут.
+у бота своя копия в Firestore, две стороны синхронизируются автоматически.
 
 ```
-Notion ──(GitHub Actions, каждые 15 мин)──► YDB (Yandex Cloud) ◄── Cloud Function ◄── Telegram
-       ◄───────── изменения из бота ───────┘                    └── таймеры 09:00 / 18:00 / пт 18:00
+Telegram ──webhook──► Cloud Run (europe-west1) ──► Firestore
+                          │   ▲
+          правки из бота ─┘   └─ Cloud Scheduler каждые 10 мин: синхронизация + сводки 09:00 / 18:00 / пт
+                          ▼
+                       Notion
 ```
-
-Почему через GitHub: Notion не отвечает российским IP, а Yandex Cloud — российский. Бот никогда
-не ходит в Notion сам, поэтому работает, даже если Notion недоступен.
 
 ## Что умеет
 
@@ -24,7 +24,7 @@ Notion ──(GitHub Actions, каждые 15 мин)──► YDB (Yandex Cloud
 | `/new` | новая задача: название → этап → приоритет → срок |
 | `/find` или просто текст в личку | поиск по задачам и идеям |
 | `/team` | команда, приём заявок, привязка к пользователю Notion |
-| `/sync` | синхронизация сейчас (если задан `GITHUB_TOKEN`) |
+| `/sync` | синхронизация с Notion сейчас |
 | `/bindchat` (в общем чате) | чат для сводок и ленты событий |
 
 Карточка задачи: взять / снять с себя / назначить, статусы, перенос срока (+1/+3/+7/дата),
@@ -42,18 +42,21 @@ Notion ──(GitHub Actions, каждые 15 мин)──► YDB (Yandex Cloud
 
 ```
 bot/
-  handler.py          вход Yandex Cloud Function (webhook + таймеры)
-  run_polling.py      локальный запуск
+  server.py           HTTP-сервер для Cloud Run: webhook, /cron/tick, /cron/setup
+  run_polling.py      локальный запуск без облака
+  Dockerfile
   tbl_bot/
     app.py            вся логика экранов и кнопок (без Telegram-библиотеки → тестируется)
     bot.py            тонкий адаптер aiogram 3
     service.py        действия с задачами + история/журнал
     logic.py          прогресс, серия, наставник, риски вех, поиск, даты
     texts.py          тексты сообщений
-    jobs.py           утро / вечер / неделя
-    storage/          SQLite (локально, тесты) и YDB
+    jobs.py           утро / вечер / неделя и их расписание
+    ai.py             точка подключения ИИ (пока выключен)
+    storage/          SQLite (локально, тесты) и Firestore
   sync/               Notion API + двусторонняя синхронизация
-  tests/              26 тестов на фейковом Notion
+  tests/              тесты на фейковом Notion, aiogram и эмуляторе Firestore
+  deploy/             инструкция и скрипт настройки Google Cloud
 ```
 
 ## Локально
@@ -62,8 +65,7 @@ bot/
 cd bot
 pip install -r requirements-dev.txt
 python -m pytest -q
-NOTION_TOKEN=... python -m sync.run_sync      # загрузить данные из Notion в tbl_bot.sqlite3
-BOT_TOKEN=...    python run_polling.py
+BOT_TOKEN=... NOTION_TOKEN=... python run_polling.py   # данные в tbl_bot.sqlite3
 ```
 
-Развёртывание в Yandex Cloud — [deploy/README.md](deploy/README.md).
+Развёртывание в Google Cloud Run — [deploy/README.md](deploy/README.md).

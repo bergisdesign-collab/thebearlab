@@ -22,10 +22,16 @@ ADMIN_IDS = {int(x) for x in re.split(r"[,; ]+", os.environ.get("ADMIN_IDS", "")
 # AI is switched off for now; see tbl_bot/ai.py
 AI_PROVIDER = os.environ.get("AI_PROVIDER", "none")
 
-# Optional: lets /sync start the GitHub Actions workflow immediately.
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "bergisdesign-collab/thebearlab")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-SYNC_WORKFLOW = os.environ.get("SYNC_WORKFLOW", "notion-sync.yml")
+NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
+# Shared secret for /cron/* endpoints (Cloud Scheduler sends it in the X-Cron-Secret header).
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
+
+# Scheduled jobs, Moscow time. A job fires on the first tick in [time, time + 2h).
+JOBS = {
+    "morning": {"hour": 9, "minute": 0, "weekday": None},
+    "evening": {"hour": 18, "minute": 0, "weekday": None},
+    "weekly": {"hour": 18, "minute": 0, "weekday": 4},     # Friday
+}
 
 NOTION_TASKS_DB = os.environ.get("NOTION_TASKS_DB", "68024e36533543438e3ba32e71a2b314")
 NOTION_MILESTONES_DB = os.environ.get("NOTION_MILESTONES_DB", "505ce45d15a446ab9fe86649958dd598")

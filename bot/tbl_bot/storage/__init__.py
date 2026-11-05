@@ -1,4 +1,4 @@
-"""Key-value document storage with two backends: SQLite (local/tests) and YDB (Yandex Cloud).
+"""Key-value document storage with two backends: SQLite (local/tests) and Firestore (Google Cloud).
 
 Everything is stored as JSON documents addressed by (kind, id):
   task, milestone, idea, member, notion_user, kv, day, fsm
@@ -34,6 +34,13 @@ class Storage:
 
     def events(self, since_iso: str = "", task_id: str = "") -> list[Event]:
         raise NotImplementedError
+
+    # --- request scoping (backends with a read cache override these) ---------
+    def begin(self) -> None:
+        """Start of a request: forget cached reads."""
+
+    def refresh(self, kind: str) -> None:
+        """Drop the cached copy of one kind so the next read sees other writers."""
 
     # --- typed helpers ----------------------------------------------------
     def tasks(self, include_archived: bool = False) -> list[Task]:
@@ -109,10 +116,10 @@ class Storage:
 
 
 def open_storage() -> Storage:
-    """Pick backend from env: YDB_ENDPOINT set → YDB, otherwise SQLite file."""
-    if os.environ.get("YDB_ENDPOINT"):
-        from .ydb_store import YdbStorage
-        return YdbStorage(os.environ["YDB_ENDPOINT"], os.environ["YDB_DATABASE"])
+    """Firestore on Google Cloud (STORAGE=firestore, set by the deploy), otherwise a SQLite file."""
+    if os.environ.get("STORAGE", "").lower() == "firestore":
+        from .firestore_store import FirestoreStorage
+        return FirestoreStorage(prefix=os.environ.get("FIRESTORE_PREFIX", "tbl"))
     from .sqlite import SqliteStorage
     return SqliteStorage(os.environ.get("TBL_SQLITE", "tbl_bot.sqlite3"))
 

@@ -79,18 +79,41 @@ def test_webhook_flow():
     assert today.reply_markup.inline_keyboard
 
 
-def test_cloud_function_handler(monkeypatch):
-    import handler
-    st = SqliteStorage()
-    session = FakeSession()
-    monkeypatch.setattr(handler, "_storage", st)
-    monkeypatch.setattr(handler, "make_bot", lambda: Bot("123456:TEST", session=session))
-    monkeypatch.setattr(handler.config, "WEBHOOK_SECRET", "s3cret")
+def test_cloud_run_server(monkeypatch):
+    from aiohttp.test_utils import TestClient, TestServer
 
-    ev = {"headers": {"X-Telegram-Bot-Api-Secret-Token": "bad"}, "body": json.dumps(_update(1, 1, text="/start"))}
-    assert handler.handler(ev, None)["statusCode"] == 403
-    ev["headers"]["X-Telegram-Bot-Api-Secret-Token"] = "s3cret"
-    assert handler.handler(ev, None)["statusCode"] == 200
+    import server
+    from tbl_bot import config
+    monkeypatch.setattr(config, "WEBHOOK_SECRET", "s3cret")
+    monkeypatch.setattr(config, "CRON_SECRET", "cr0n")
+    st = SqliteStorage()
+    fn = FakeNotion()
+    ids = seed(fn)
+    session = FakeSession()
+    bot = Bot("123456:TEST", session=session)
+    rt = server.Runtime(st=st, sync_st=st, notion=fn, bot=bot, now_fn=lambda: NOW)
+
+    async def go():
+        async with TestClient(TestServer(server.make_app(rt))) as c:
+            assert (await c.get("/")).status == 200
+            r = await c.post("/tg", json=_update(1, 1, text="/start"),
+                             headers={"X-Telegram-Bot-Api-Secret-Token": "bad"})
+            assert r.status == 403
+            assert (await c.post("/cron/tick")).status == 403
+            r = await c.post("/cron/tick", headers={"X-Cron-Secret": "cr0n"})
+            body = await r.json()
+            assert "Задач: 5" in body["sync"] and body["morning"] == 0     # synced; nobody to notify yet
+            r = await c.post("/cron/tick", headers={"X-Cron-Secret": "cr0n"})
+            assert "morning" not in await r.json()                          # once a day
+            h = {"X-Telegram-Bot-Api-Secret-Token": "s3cret"}
+            assert (await c.post("/tg", json=_update(1, 2, text="/start"), headers=h)).status == 200
+            await c.post("/tg", json=_update(1, 3, data=f"t:take:{ids['t_fabric']}"), headers=h)
+            r = await c.post("/cron/setup", headers={"X-Cron-Secret": "cr0n"})
+            assert (await r.json())["webhook"].endswith("/tg")
+
+    asyncio.run(go())
     assert st.member(1).admin
-    timer = {"messages": [{"details": {"payload": "morning"}}]}
-    assert handler.handler(timer, None)["statusCode"] == 200
+    t = st.task(ids["t_fabric"])
+    assert t.assignee_tg == 1 and not t.dirty                          # pushed to Notion right away
+    assert fn.page(ids["t_fabric"])["properties"]["Статус"]["status"]["name"] == "В работе"
+    assert any(type(m).__name__ == "SetWebhook" for m in session.sent)

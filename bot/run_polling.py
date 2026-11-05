@@ -1,10 +1,9 @@
-"""Local run without Yandex Cloud: long polling + SQLite (or YDB if YDB_ENDPOINT is set).
+"""Local run without Google Cloud: long polling + SQLite file, Notion sync and jobs in the background.
 
-    cd bot && pip install -r requirements.txt
-    BOT_TOKEN=... python run_polling.py
-    # load data from Notion locally:  NOTION_TOKEN=... python -m sync.run_sync
+    cd bot && pip install -r requirements-dev.txt
+    BOT_TOKEN=... NOTION_TOKEN=... python run_polling.py
 
-Jobs can be fired by hand:  python run_polling.py --job morning
+Fire a job by hand:  python run_polling.py --job morning
 """
 from __future__ import annotations
 
@@ -12,22 +11,36 @@ import argparse
 import asyncio
 import logging
 
+from server import Runtime
 from tbl_bot import jobs
-from tbl_bot.app import App
-from tbl_bot.bot import build_dispatcher, make_bot, send_notices, set_commands
-from tbl_bot.storage import open_storage
+from tbl_bot.bot import send_notices, set_commands
+
+log = logging.getLogger("tbl_bot")
+
+
+async def scheduler(rt: Runtime, every: int = 600) -> None:
+    while True:
+        try:
+            await asyncio.to_thread(rt.full_sync)
+            now = rt.now()
+            for job in jobs.due(rt.st, now):
+                await send_notices(rt.bot, jobs.run(job, rt.st, rt.now))
+                jobs.mark_done(rt.st, job, now)
+        except Exception:
+            log.exception("background tick failed")
+        await asyncio.sleep(every)
 
 
 async def main(job: str = "") -> None:
-    st = open_storage()
-    bot = make_bot()
+    rt = Runtime()
     if job:
-        await send_notices(bot, jobs.run(job, st))
-        await bot.session.close()
+        await send_notices(rt.bot, jobs.run(job, rt.st))
+        await rt.bot.session.close()
         return
-    await set_commands(bot)
-    await bot.delete_webhook(drop_pending_updates=False)
-    await build_dispatcher(App(st)).start_polling(bot)
+    await set_commands(rt.bot)
+    await rt.bot.delete_webhook(drop_pending_updates=False)
+    asyncio.create_task(scheduler(rt))
+    await rt.dp.start_polling(rt.bot)
 
 
 if __name__ == "__main__":

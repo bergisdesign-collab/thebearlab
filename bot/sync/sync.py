@@ -1,13 +1,17 @@
-"""Two-way Notion ↔ bot storage sync. Runs in GitHub Actions every 15 minutes.
+"""Two-way Notion ↔ bot storage sync.
+
+Runs inside the bot: a full sync on every scheduler tick (10 min) and on /sync, plus a
+push of the bot's own changes right after each Telegram action.
 
 Rules
   * Pull: every Notion field overwrites the bot copy, EXCEPT fields the bot changed and has not
-    pushed yet (Task.dirty) — those win and are pushed right after.
+    pushed yet (`dirty`) — those win and are pushed right after.
   * Push: only dirty fields are sent; a field leaves `dirty` only if it still has the pushed value
     (so a change made in the bot during the sync is not lost).
   * Tasks created in the bot ("local-…") become Notion pages; their id in the bot stays the same,
     the Notion page id is kept in Task.notion_id.
   * Pages deleted/archived in Notion are archived in the bot.
+  * Nothing is written to storage unless it actually changed (keeps Firestore writes low).
 """
 from __future__ import annotations
 
@@ -49,6 +53,14 @@ class Report:
     archived: int = 0
     errors: list = field(default_factory=list)
 
+    def short(self) -> str:
+        p = self.pulled
+        s = (f"Задач: {p.get('tasks', 0)}, вех: {p.get('milestones', 0)}, идей: {p.get('ideas', 0)}. "
+             f"Отправлено изменений: {self.pushed}, новых страниц: {self.created}.")
+        if self.errors:
+            s += f" Ошибок: {len(self.errors)}."
+        return s
+
 
 def _d(v) -> Optional[date]:
     return date.fromisoformat(v[:10]) if v else None
@@ -60,21 +72,32 @@ class Syncer:
         self.st = st
         self.now = now_fn
         self.r = Report()
-        self.types = {"task": dict(TASK_TYPES), "ms": dict(MS_TYPES), "idea": dict(IDEA_TYPES)}
+        saved = st.kv_get("notion_types") or {}
+        self.types = {"task": {**TASK_TYPES, **saved.get("task", {})},
+                      "ms": {**MS_TYPES, **saved.get("ms", {})},
+                      "idea": {**IDEA_TYPES, **saved.get("idea", {})}}
         self.n2l: dict[str, str] = {}   # Notion page id → bot task id
         self.l2n: dict[str, str] = {}   # bot task id → Notion page id
 
-    # ------------------------------------------------------------------ pull
+    # ------------------------------------------------------------------ helpers
     def _learn_types(self, key: str, pages: list[dict]) -> None:
         for name, t in prop_types(pages).items():
             if name in self.types[key]:
                 self.types[key][name] = t
 
+    def _build_maps(self) -> None:
+        for t in self.st.tasks(include_archived=True):
+            if t.notion_id:
+                self.n2l[t.notion_id] = t.id
+                self.l2n[t.id] = t.notion_id
+
+    # ------------------------------------------------------------------ pull
     def pull_users(self) -> None:
         users = self.n.users()
         for u in users:
-            self.st.put("notion_user", u["id"], {"id": u["id"], "name": u.get("name") or "",
-                                                "type": u.get("type", "person")})
+            rec = {"id": u["id"], "name": u.get("name") or "", "type": u.get("type", "person")}
+            if self.st.get("notion_user", u["id"]) != rec:
+                self.st.put("notion_user", u["id"], rec)
         self.r.pulled["users"] = len(users)
 
     def pull_milestones(self) -> None:
@@ -87,10 +110,12 @@ class Syncer:
                       "status": read(pr.get("Статус")) or "Впереди", "criterion": read(pr.get("Критерий")) or ""}
             d = self.st.get("milestone", pid)
             m = Milestone.from_dict(d) if d else Milestone(id=pid, title=remote["title"])
+            before = m.to_dict()
             for f, v in remote.items():
                 if f not in m.dirty:
                     setattr(m, f, v)
-            self.st.save_milestone(m)
+            if m.to_dict() != before or d is None:
+                self.st.save_milestone(m)
         self.r.pulled["milestones"] = len(pages)
 
     def _parse_task(self, p: dict) -> dict:
@@ -135,35 +160,29 @@ class Syncer:
     def pull_tasks(self) -> None:
         pages = self.n.query(config.NOTION_TASKS_DB)
         self._learn_types("task", pages)
-        local = self.st.tasks(include_archived=True)
-        by_notion = {(t.notion_id or t.id): t for t in local if not t.id.startswith("local-") or t.notion_id}
-        for key, t in by_notion.items():
-            self.n2l[key] = t.id
+        self._build_maps()
         for p in pages:
             self.n2l.setdefault(nid(p["id"]), nid(p["id"]))
         self.l2n = {v: k for k, v in self.n2l.items()}
         users = {m.notion_user_id: m for m in self.st.members() if m.notion_user_id}
-        seen = set()
-        for p in pages:
-            pid = nid(p["id"])
-            seen.add(pid)
-            remote = self._parse_task(p)
-            for _ in range(3):   # optimistic concurrency against the bot writing the same task
-                cur = by_notion.get(pid)
-                fresh = self.st.task(cur.id) if cur else None
-                t = fresh or Task(id=pid, title=remote["title"], notion_id=pid)
-                rev = t.rev
-                t.notion_id = pid
-                t = self._merge(t, remote, users)
-                t.notion_edited = p.get("last_edited_time", "")
-                t.archived = False
-                again = self.st.task(t.id)
-                if again is None or again.rev == rev:
-                    self.st.save_task(t)
-                    break
-        for t in local:
-            key = t.notion_id or (None if t.id.startswith("local-") else t.id)
-            if key and key not in seen and not t.archived:
+        remotes = {nid(p["id"]): (p, self._parse_task(p)) for p in pages}
+
+        # Re-read right before writing so edits made in the bot meanwhile are not overwritten.
+        self.st.refresh("task")
+        local = {t.id: t for t in self.st.tasks(include_archived=True)}
+        for pid, (p, remote) in remotes.items():
+            lid = self.n2l[pid]
+            cur = local.get(lid)
+            t = cur or Task(id=lid, title=remote["title"], notion_id=pid)
+            before = t.to_dict() if cur else None
+            t.notion_id = pid
+            t = self._merge(t, remote, users)
+            t.notion_edited = p.get("last_edited_time", "")
+            t.archived = False
+            if t.to_dict() != before:
+                self.st.save_task(t)
+        for t in local.values():
+            if t.notion_id and t.notion_id not in remotes and not t.archived:
                 t.archived = True
                 self.st.save_task(t)
                 self.r.archived += 1
@@ -172,6 +191,7 @@ class Syncer:
     def pull_ideas(self) -> None:
         pages = self.n.query(config.NOTION_IDEAS_DB)
         self._learn_types("idea", pages)
+        self.st.refresh("idea")
         for p in pages:
             pid = nid(p["id"])
             pr = p["properties"]
@@ -181,10 +201,12 @@ class Syncer:
                       "tasks": [self.n2l.get(x, x) for x in (read(pr.get("Задача")) or [])]}
             d = self.st.get("idea", pid)
             i = Idea.from_dict(d) if d else Idea(id=pid, title=remote["title"])
+            before = i.to_dict()
             for f, v in remote.items():
                 if f not in i.dirty:
                     setattr(i, f, v)
-            self.st.save_idea(i)
+            if i.to_dict() != before or d is None:
+                self.st.save_idea(i)
         self.r.pulled["ideas"] = len(pages)
 
     # ------------------------------------------------------------------ push
@@ -198,11 +220,11 @@ class Syncer:
         return getattr(t, f)
 
     def push_tasks(self) -> None:
+        sent: list[tuple[Task, dict]] = []
         for t in self.st.tasks(include_archived=True):
             if not t.dirty or (t.archived and not t.id.startswith("local-")):
                 continue
-            fields = ["due" if f == "start" else f for f in t.dirty]
-            fields = list(dict.fromkeys(fields))
+            fields = list(dict.fromkeys("due" if f == "start" else f for f in t.dirty))
             snapshot = {f: getattr(t, f) for f in t.dirty}
             props = {}
             for f in fields:
@@ -225,6 +247,11 @@ class Syncer:
             except Exception as e:  # keep dirty, try next time
                 self.r.errors.append(f"task {t.title}: {e}")
                 continue
+            sent.append((t, snapshot))
+        if not sent:
+            return
+        self.st.refresh("task")
+        for t, snapshot in sent:
             fresh = self.st.task(t.id) or t
             fresh.notion_id = t.notion_id
             unresolved = [x for x in fresh.depends_on if x not in self.l2n]
@@ -250,6 +277,7 @@ class Syncer:
             except Exception as e:
                 self.r.errors.append(f"milestone {m.title}: {e}")
                 continue
+            self.st.refresh("milestone")
             d = self.st.get("milestone", m.id)
             fresh = Milestone.from_dict(d) if d else m
             fresh.dirty = [f for f in fresh.dirty if not (f in snap and getattr(fresh, f) == snap[f])]
@@ -268,7 +296,7 @@ class Syncer:
                     continue
                 v = getattr(i, f)
                 if f == "tasks":
-                    if any(x not in self.l2n and x.startswith("local-") for x in v):
+                    if any(x.startswith("local-") and x not in self.l2n for x in v):
                         keep.append(f)   # task not in Notion yet
                     v = [self.l2n.get(x, x) for x in v if not (x.startswith("local-") and x not in self.l2n)]
                 props[name] = write(self.types["idea"][name], v)
@@ -277,6 +305,7 @@ class Syncer:
             except Exception as e:
                 self.r.errors.append(f"idea {i.title}: {e}")
                 continue
+            self.st.refresh("idea")
             d = self.st.get("idea", i.id)
             fresh = Idea.from_dict(d) if d else i
             fresh.dirty = [f for f in fresh.dirty
@@ -285,11 +314,25 @@ class Syncer:
             self.r.pushed += 1
 
     # ------------------------------------------------------------------- run
+    def has_local_changes(self) -> bool:
+        return (any(t.dirty for t in self.st.tasks(include_archived=True))
+                or any(m.dirty for m in self.st.milestones()) or any(i.dirty for i in self.st.ideas()))
+
+    def push(self) -> Report:
+        """Only send the bot's own changes (used right after a Telegram action)."""
+        self._build_maps()
+        self.push_tasks()
+        self.push_ideas()
+        self.push_milestones()
+        return self.r
+
     def run(self) -> Report:
         self.pull_users()
         self.pull_milestones()
         self.pull_tasks()
         self.pull_ideas()
+        if self.st.kv_get("notion_types") != self.types:
+            self.st.kv_set("notion_types", self.types)
         Service(self.st, self.now).refresh_milestones()
         self.push_tasks()
         self.push_ideas()

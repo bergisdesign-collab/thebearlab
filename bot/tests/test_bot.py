@@ -348,3 +348,59 @@ def test_no_jobs_on_holidays(env):
     from datetime import datetime
     from tbl_bot.config import TZ
     assert jobs.run("morning", st, lambda: datetime(2027, 1, 3, 9, tzinfo=TZ)) == []
+
+
+# ---------------------------------------------------------------- scheduling & write economy
+
+def test_jobs_due_once_per_day(env):
+    from datetime import datetime
+    from tbl_bot.config import TZ
+    st = env[0]
+    fri = datetime(2026, 11, 6, 18, 5, tzinfo=TZ)
+    assert jobs.due(st, datetime(2026, 11, 6, 8, 55, tzinfo=TZ)) == []
+    assert jobs.due(st, datetime(2026, 11, 6, 9, 3, tzinfo=TZ)) == ["morning"]
+    assert jobs.due(st, fri) == ["evening", "weekly"]
+    jobs.mark_done(st, "evening", fri)
+    assert jobs.due(st, fri) == ["weekly"]
+    assert jobs.due(st, datetime(2026, 11, 6, 21, 0, tzinfo=TZ)) == []   # window passed
+    assert "weekly" not in jobs.due(st, datetime(2026, 11, 5, 18, 5, tzinfo=TZ))
+
+
+class CountingStorage(SqliteStorage):
+    def __init__(self):
+        super().__init__(":memory:")
+        self.writes = []
+
+    def put(self, kind, id, data):
+        self.writes.append((kind, id))
+        super().put(kind, id, data)
+
+
+def test_idle_sync_writes_almost_nothing():
+    st = CountingStorage()
+    fn = FakeNotion()
+    seed(fn)
+    Syncer(fn, st, lambda: NOW).run()
+    st.writes.clear()
+    Syncer(fn, st, lambda: NOW).run()
+    assert st.writes == [("kv", "last_sync")]
+
+
+def test_push_only_sends_bot_changes(env):
+    st, fn, ids, app = env
+    team(app)
+    app.on_callback(SERGEY, SERGEY.id, f"t:dd:{ids['t_fabric']}:2")
+    s = Syncer(fn, st, lambda: NOW)
+    assert s.has_local_changes()
+    calls = len(fn.calls)
+    s.push()
+    assert [c[0] for c in fn.calls[calls:]] == ["update"]                # no queries, one page update
+    assert not Syncer(fn, st, lambda: NOW).has_local_changes()
+
+
+def test_sync_command_runs_sync(env):
+    st, fn, ids, app = env
+    team(app)
+    app.sync_fn = lambda: Syncer(fn, st, lambda: NOW).run().short()
+    r = app.on_command(SERGEY, SERGEY.id, True, "sync")
+    assert "Синхронизировано" in r.screen.text and "Задач: 5" in r.screen.text

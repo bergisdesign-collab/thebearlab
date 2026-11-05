@@ -5,9 +5,7 @@ Input: commands, callback data, free text. Output: `Result` (screen to show + no
 """
 from __future__ import annotations
 
-import json
 import time
-import urllib.request
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from html import escape as esc
@@ -66,11 +64,13 @@ MENU = [[Btn("Сводка", "go:today"), Btn("Мои", "go:my"), Btn("Что д
 
 
 class App:
-    def __init__(self, st: Storage, now_fn: Callable[[], datetime] = config.now, ai: Optional[AIClient] = None):
+    def __init__(self, st: Storage, now_fn: Callable[[], datetime] = config.now, ai: Optional[AIClient] = None,
+                 sync_fn: Optional[Callable[[], str]] = None):
         self.st = st
         self.now = now_fn
         self.svc = Service(st, now_fn)
         self.ai = ai or AIClient()
+        self.sync_fn = sync_fn      # runs Notion sync now, returns a short report
 
     def today(self) -> date:
         return self.now().date()
@@ -630,20 +630,16 @@ class App:
 
     # --- sync ------------------------------------------------------------------
     def trigger_sync(self, m: Member) -> Result:
-        last = self.st.kv_get("last_sync")
-        when = f"Последняя синхронизация: {last[8:10]}.{last[5:7]} {last[11:16]} МСК. " if last else ""
-        if not config.GITHUB_TOKEN:
-            return Result(Screen(when + "Синхронизация идёт автоматически каждые 15 минут."))
+        if not self.sync_fn:
+            last = self.st.kv_get("last_sync")
+            when = f"Последняя синхронизация: {last[8:10]}.{last[5:7]} {last[11:16]} МСК. " if last else ""
+            return Result(Screen(when + "Синхронизация с Notion идёт автоматически каждые 10 минут."))
         stamp = self.st.kv_get("sync_requested", 0)
-        if time.time() - stamp < 120:
-            return Result(Screen(when + "Синхронизация уже запущена, подожди пару минут."))
-        url = (f"https://api.github.com/repos/{config.GITHUB_REPO}/actions/workflows/"
-               f"{config.SYNC_WORKFLOW}/dispatches")
-        req = urllib.request.Request(url, data=json.dumps({"ref": "main"}).encode(), method="POST", headers={
-            "Authorization": f"Bearer {config.GITHUB_TOKEN}", "Accept": "application/vnd.github+json"})
-        try:
-            urllib.request.urlopen(req, timeout=10)
-        except Exception:
-            return Result(Screen(when + "Не получилось запустить синхронизацию — она всё равно пройдёт по расписанию."))
+        if time.time() - stamp < 30:
+            return Result(Screen("Синхронизация только что была — подожди полминуты."))
         self.st.kv_set("sync_requested", time.time())
-        return Result(Screen(when + "Запустил синхронизацию с Notion — займёт 1–2 минуты."))
+        try:
+            report = self.sync_fn()
+        except Exception as e:
+            return Result(Screen(f"Не получилось синхронизироваться с Notion: {esc(str(e)[:200])}"))
+        return Result(Screen("Синхронизировано с Notion. " + esc(report)))

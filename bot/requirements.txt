@@ -1,2 +1,3 @@
 aiogram>=3.13,<4
-ydb>=3.18,<4
+requests>=2.31
+google-cloud-firestore>=2.16,<3
