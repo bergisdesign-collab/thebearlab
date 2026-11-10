@@ -1,0 +1,30 @@
+name: Bot diagnostics
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Telegram webhook status
+        run: |
+          curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" | jq '.result | {url, pending_update_count, last_error_date, last_error_message, allowed_updates}'
+          curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/getMe" | jq '.result | {username, can_join_groups, can_read_all_group_messages}'
+          echo "now: $(date +%s)"
+      - name: Worker health
+        run: curl -sS -m 20 https://thebearlab-bot.thebearlab.workers.dev/ ; echo
+      - name: Worker logs (last 30 min)
+        run: |
+          NOW=$(date +%s%3N); FROM=$((NOW - 1800000))
+          jq -n --argjson from "$FROM" --argjson to "$NOW" \
+            '{queryId:"diag", timeframe:{from:$from, to:$to}, view:"events", limit:50,
+              parameters:{filters:[{key:"$metadata.service", operation:"eq", type:"string", value:"thebearlab-bot"}]}}' > q.json
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/observability/telemetry/query" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @q.json > out.json
+          jq -r '.errors // empty' out.json
+          jq -r '.result.events.events[]? | "\(.timestamp) \(.["$metadata"].level // "") \((.["$metadata"].message // .source // "") | tostring | .[0:400])"' out.json | head -80 || true
