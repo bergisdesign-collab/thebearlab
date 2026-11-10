@@ -100,4 +100,19 @@ it("in a group the bot answers @mentions and replies to its messages, and ignore
   tg.sent = [];
   await call("/tg", g(4, "а что по ткани?", { reply_to_message: { message_id: 5, from: { id: 999, is_bot: true, username: "BearLabTaskManager_bot" } } }), H);
   assert.match(tg.sent.at(-1)!.body.text, /ткан/i);
+  tg.sent = [];
+  await call("/tg", g(5, "Бро, ткань"), H);
+  assert.match(tg.sent.at(-1)!.body.text, /«ткань»/);
+  tg.sent = [];
+  await call("/tg", g(6, "бронирование отеля на завтра"), H);      // a word that only starts with «бро» is not a call
+  assert.equal(tg.sent.length, 0);
+});
+
+it("nickname parsing", async () => {
+  const { stripNickname } = await import("../src/telegram.ts");
+  assert.equal(stripNickname("Бро, что горит?"), "что горит?");
+  assert.equal(stripNickname("БРО перенеси ткань"), "перенеси ткань");
+  assert.equal(stripNickname("бро"), "");
+  assert.equal(stripNickname("брокер звонил"), null);
+  assert.equal(stripNickname("привет бро"), null);
 });

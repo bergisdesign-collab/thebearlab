@@ -106,6 +106,16 @@ export async function sendNotices(tg: TelegramApi, notices: Notice[]): Promise<v
 
 const who = (u: any): Who => ({ id: u.id, name: u.first_name || u.username || String(u.id), username: u.username || "" });
 
+/** Words that address the bot in a group when a message starts with them («Бро, что горит?»). */
+export const NICKNAMES = ["бро", "bro", "бот"];
+
+/** If the message starts with a nickname, returns the rest of it; otherwise null. */
+export function stripNickname(text: string, nicknames: string[] = NICKNAMES): string | null {
+  const m = text.trim().match(/^([\p{L}]+)[\s,.:!?—-]*(.*)$/su);
+  if (!m || !nicknames.includes(m[1].toLowerCase())) return null;
+  return m[2].trim();
+}
+
 export interface UpdateOptions {
   /** Speech-to-text for voice messages; absent → voice is not supported. */
   transcribe?: (audio: ArrayBuffer) => Promise<string>;
@@ -183,8 +193,10 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
     const mentioned = !!me && text.toLowerCase().includes("@" + me);
     const r = msg.reply_to_message?.from;
     const replyToBot = !!r?.is_bot && (!me || (r.username || "").toLowerCase() === me);
-    if (!mentioned && !replyToBot) return;
-    const q = me ? text.replace(new RegExp("@" + me, "ig"), " ").replace(/\s+/g, " ").trim() : text;
+    const byNick = stripNickname(text);
+    if (!mentioned && !replyToBot && byNick === null) return;
+    let q = me ? text.replace(new RegExp("@" + me, "ig"), " ").replace(/\s+/g, " ").trim() : text;
+    if (byNick !== null && !mentioned) q = byNick;
     if (app.askFn) await tg.typing(chatId);
     res = await app.onGroupText(who(msg.from), chatId, q);
     replyTo = msg.message_id;
