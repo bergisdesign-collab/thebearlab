@@ -42,7 +42,9 @@ export class TelegramApi {
     const r = await this.fetchFn(`https://api.telegram.org/bot${this.token}/${method}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
-    return r.json();
+    const data: any = await r.json();
+    if (!data.ok) console.warn(`telegram ${method} failed: ${data.description}`);
+    return data;
   }
 
   sendMessage(chatId: number, text: string, kb?: Btn[][]) {
@@ -117,6 +119,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
   }
 
   const msg = update.message;
+  console.log("update", JSON.stringify({ id: update.update_id, chat: msg?.chat?.type, text: typeof msg?.text === "string" ? msg.text.slice(0, 60) : undefined, voice: !!msg?.voice, keys: Object.keys(msg || update) }));
   if (!msg || !msg.from) return;
   const chatId: number = msg.chat.id;
   const isPrivate = msg.chat.type === "private";
@@ -165,6 +168,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
     if (isPrivate && app.askFn && !prefix) await tg.typing(chatId);
     res = await app.onText(who(msg.from), chatId, isPrivate, text);
   }
+  console.log("result", JSON.stringify({ screen: res ? res.screen?.text.slice(0, 80) : null, notices: res?.notices.length }));
   if (!res) return;
   if (res.screen) await tg.sendMessage(chatId, prefix + res.screen.text, res.screen.kb);
   await sendNotices(tg, res.notices);

@@ -388,7 +388,9 @@ export class Assistant {
     ];
     let answer = "";
     for (let step = 0; step < MAX_STEPS; step++) {
+      const t0 = Date.now();
       const resp = await this.llm.messages({ model: MODEL_FAST, max_tokens: 1500, system, tools, messages });
+      console.log("ai step", step, resp.stop_reason, `${Date.now() - t0}ms`, (resp.content || []).map((b: any) => b.type === "tool_use" ? `tool:${b.name}` : b.type).join(","));
       const content: any[] = resp.content || [];
       const texts = content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
       const uses = content.filter((b) => b.type === "tool_use");
