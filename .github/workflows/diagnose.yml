@@ -28,3 +28,5 @@ jobs:
             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data @q.json > out.json
           jq -r '.errors // empty' out.json
           jq -r '.result.events.events[]? | "\(.timestamp) \(.["$metadata"].level // "") \((.["$metadata"].message // .source // "") | tostring | .[0:400])"' out.json | head -80 || true
+          echo "---- details of the latest /tg requests ----"
+          jq '[.result.events.events[]? | select(((.["$metadata"].message // "") | tostring | test("/tg")) or (.["$workers"].event.request.url // "" | test("/tg")))] | .[0:3] | map({timestamp, workers: .["$workers"], meta: .["$metadata"]})' out.json | head -150 || true
