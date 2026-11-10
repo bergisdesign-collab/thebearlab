@@ -179,6 +179,15 @@ export class App {
         case "i": return await this.ideaCb(m, p);
         case "n": return await this.newCb(m, p);
         case "m": return await this.memberCb(m, p);
+        case "ai": {
+          const topics = (await this.st.kvGet<string[]>(`topics:${m.tg_id}`)) || [];
+          const topic = topics[Number(p[1])];
+          if (!topic || !this.askFn) return R(undefined, { toast: "Тема устарела — задай вопрос заново" });
+          const r = await this.askFn(m, topic);
+          r.newMessage = true;
+          r.toast = topic;
+          return r;
+        }
       }
     } catch (e) {
       if (e instanceof ActionError) return R(undefined, { toast: e.message, alert: true });

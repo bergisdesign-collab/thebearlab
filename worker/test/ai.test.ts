@@ -213,3 +213,24 @@ it("voice uses Cloudflare Workers AI by default (no OpenAI key needed)", async (
   assert.equal(seen[0][1].audio, btoa("hi"));
   assert.match(tg.sent.at(-1)!.body.text, /🎙 <i>покажи мои задачи<\/i>/);   // without AI key: transcribed, then searched
 });
+
+it("answers become plain Telegram HTML; «Темы:» turn into buttons that continue the dialogue", async () => {
+  const { mdToHtml, splitTopics } = await import("../src/ai.ts");
+  assert.equal(mdToHtml("**Главное:** ткань <срочно>\n- пункт\n* второй\n### Итог"), "<b>Главное:</b> ткань &lt;срочно&gt;\n• пункт\n• второй\n<b>Итог</b>");
+  assert.equal(mdToHtml("это *важно* и `код`"), "это <i>важно</i> и <code>код</code>");
+  assert.deepEqual(splitTopics("Коротко: всё ок.\nТемы: риски вехи | загрузка Ани | **ткань**"),
+    { body: "Коротко: всё ок.", topics: ["риски вехи", "загрузка Ани", "ткань"] });
+
+  const llm = new FakeLlm([say("Неделя напряжённая, но решаемая: главное — **решение по НГ**.\nТемы: Риски вехи | Кто перегружен"), say("По вехе: успеваем, если решим до пятницы.")]);
+  app.askFn = (m, text) => new Assistant(app, llm, clock).ask(m, text);
+  const r = await app.onText(SERGEY, SERGEY.id, true, "как дела?");
+  assert.ok(!r!.screen!.text.includes("*"));
+  assert.match(r!.screen!.text, /<b>решение по НГ<\/b>/);
+  assert.ok(!r!.screen!.text.includes("Темы"));
+  const topicBtns = r!.screen!.kb.flat().filter((b) => (b.data || "").startsWith("ai:"));
+  assert.deepEqual(topicBtns.map((b) => b.text), ["💬 Риски вехи", "💬 Кто перегружен"]);
+  const r2 = await app.onCallback(SERGEY, SERGEY.id, topicBtns[0].data!);
+  assert.ok(r2.newMessage);
+  assert.equal(llm.requests[1].messages.at(-1).content, "Риски вехи");
+  assert.match(r2.screen!.text, /По вехе/);
+});

@@ -131,13 +131,45 @@ const SYSTEM = `Ты — ИИ-консультант команды TheBearLab �
 - помогаешь распределять работу: учитывай загрузку, сроки, вехи, зависимости;
 - замечаешь решения и договорённости и сохраняешь их инструментом remember.
 
+Как отвечать:
+- Начинай с короткой живой сводки по сути вопроса — 1–3 фразы, как коллега в рабочем чате: что главное, без перечня задач.
+- Подробные списки задач, дат и людей давай, только когда об этом прямо просят или без них ответ теряет смысл.
+- В конце ответа отдельной строкой предложи 2–4 темы, в которые можно углубиться дальше, строго в формате:
+  Темы: тема один | тема два | тема три
+  Каждая тема — 2–5 слов, это будут кнопки. Если вопрос был просьбой что-то сделать и она выполнена, темы можно не давать.
+- Пиши обычным текстом без Markdown: никаких звёздочек, решёток и подчёркиваний. Если нужен список — каждый пункт с новой строки, начиная с «•».
+
 Правила:
-- Отвечай по-русски, коротко и по делу; без воды и без эмодзи-салюта.
+- Отвечай по-русски, по делу, без воды и без эмодзи-салюта.
 - Перед изменением убедись, что понял, о какой задаче речь. Если подходят несколько — спроси, перечислив варианты; ничего не меняй наугад.
 - Не выдумывай задачи, даты и людей — бери их из данных и инструментов.
 - Массовые изменения (больше 3 задач за раз) сначала опиши и спроси подтверждение.
 - После изменений кратко перечисли, что сделано. Уведомления команде и запись в Notion бот делает сам.
 - Даты в ответах пиши как 13.11; в инструментах — YYYY-MM-DD. Сегодня и часовой пояс (МСК) указаны в контексте.`;
+
+// ---------------------------------------------------------------- formatting
+
+/** Pulls the «Темы: a | b | c» line out of the answer. */
+export function splitTopics(answer: string): { body: string; topics: string[] } {
+  const lines = answer.split("\n");
+  const idx = lines.findIndex((l) => /^\s*[*_]*\s*Темы\s*[*_]*\s*:/i.test(l));
+  if (idx < 0) return { body: answer.trim(), topics: [] };
+  const topics = lines[idx].replace(/^\s*[*_]*\s*Темы\s*[*_]*\s*:/i, "").split("|")
+    .map((t) => t.replace(/[*_`]/g, "").trim()).filter(Boolean).slice(0, 4);
+  lines.splice(idx, 1);
+  return { body: lines.join("\n").trim(), topics };
+}
+
+/** Model text → Telegram HTML: escapes, turns leftover Markdown into real bold/italic/code, bullets into «•». */
+export function mdToHtml(text: string): string {
+  let s = esc(text);
+  s = s.replace(/^\s{0,3}#{1,6}\s*(.+)$/gm, "<b>$1</b>");
+  s = s.replace(/^(\s*)[-*•]\s+/gm, "$1• ");
+  s = s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/__(.+?)__/g, "<b>$1</b>");
+  s = s.replace(/(^|[\s(«])\*(?!\s)([^*\n]+?)\*(?=[\s.,:;!?)»]|$)/gm, "$1<i>$2</i>");
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  return s.replace(/\*/g, "").trim();
+}
 
 // ---------------------------------------------------------------- assistant
 
@@ -409,11 +441,14 @@ export class Assistant {
       if (step === MAX_STEPS - 1) answer = texts || "Сделал, что успел. Уточни, если нужно что-то ещё.";
     }
     answer = answer || "Готово.";
+    const { body, topics } = splitTopics(answer);
     const turns = [...hist, { role: "user" as const, content: text }, { role: "assistant" as const, content: answer }].slice(-HISTORY);
     await this.st.put("chat", String(m.tg_id), { turns });
-    const kb: Btn[][] = [...this.changed].slice(0, 5).map((id) => [{ text: "Открыть задачу", data: `t:v:${id}` }]);
+    if (topics.length) await this.st.kvSet(`topics:${m.tg_id}`, topics);
+    const kb: Btn[][] = topics.map((t, i) => [{ text: `💬 ${t}`.slice(0, 60), data: `ai:${i}` }]);
+    for (const id of [...this.changed].slice(0, 5)) kb.push([{ text: "Открыть задачу", data: `t:v:${id}` }]);
     kb.push([{ text: "Меню", data: "go:menu" }]);
-    return { screen: { text: esc(answer), kb }, notices: this.notices };
+    return { screen: { text: mdToHtml(body) || "Готово.", kb }, notices: this.notices };
   }
 
   /** Weekly deep review by Opus: where we are stuck, what to change. Plain text. */
@@ -425,9 +460,9 @@ export class Assistant {
     const week = evs.slice(-200).map((e) => `${e.ts.slice(0, 16)} ${e.actor}: ${e.text}`).join("\n");
     const resp = await this.llm.messages({
       model: MODEL_DEEP, max_tokens: 1200,
-      system: SYSTEM + "\n\nСейчас твоя задача — недельный разбор для всей команды.",
+      system: SYSTEM + "\n\nСейчас твоя задача — недельный разбор для всей команды. Строку «Темы:» здесь не добавляй.",
       messages: [{ role: "user", content: `${ctx}\n\nСобытия за неделю:\n${week || "нет"}\n\nСделай разбор на ${today}: 1) что продвинулось, 2) где застреваем и почему (переносы, просрочки, перегрузка), 3) риски для ближайших вех, 4) 3–5 конкретных рекомендаций на следующую неделю с именами. Коротко, списками, без вступлений.` }],
     });
-    return (resp.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+    return mdToHtml(splitTopics((resp.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n")).body);
   }
 }

@@ -70,7 +70,7 @@ export async function run(job: string, st: Storage, clock: Clock, extras: JobExt
       if (extras.weeklyReview) {
         try {
           const review = await extras.weeklyReview();
-          if (review) out.push({ chatId: Number(group), text: texts.clip(`<b>🧠 Разбор недели</b>\n\n${texts.esc(review)}`), kb: [] });
+          if (review) out.push({ chatId: Number(group), text: texts.clip(`<b>🧠 Разбор недели</b>\n\n${review}`), kb: [] });
         } catch (e) {
           console.error("weekly review failed", e);
         }
