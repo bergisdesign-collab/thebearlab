@@ -73,22 +73,23 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
         run: |
+          # WEBHOOK_SECRET / CRON_SECRET are optional: if not set, fresh random ones are made on every deploy
+          # (the webhook is re-registered below with the new value, so nothing else needs to know them).
+          [ -n "$WEBHOOK_SECRET" ] || WEBHOOK_SECRET=$(openssl rand -hex 24)
+          [ -n "$CRON_SECRET" ] || CRON_SECRET=$(openssl rand -hex 24)
+          echo "::add-mask::$WEBHOOK_SECRET"; echo "::add-mask::$CRON_SECRET"
+          echo "CRON_SECRET_VALUE=$CRON_SECRET" >> "$GITHUB_ENV"
           jq -n --arg a "$BOT_TOKEN" --arg b "$NOTION_TOKEN" --arg c "$WEBHOOK_SECRET" --arg d "$CRON_SECRET" --arg e "$ADMIN_IDS" \
             '{BOT_TOKEN:$a, NOTION_TOKEN:$b, WEBHOOK_SECRET:$c, CRON_SECRET:$d, ADMIN_IDS:$e} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
           npx wrangler secret bulk "$RUNNER_TEMP/s.json"
           rm -f "$RUNNER_TEMP/s.json"
       - name: Webhook, schema and bot menu
         if: steps.check.outputs.go == 'yes'
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
-          if [ -z "$CRON_SECRET" ] || [ -z "$WEBHOOK_SECRET" ]; then
-            echo "::error::Add the CRON_SECRET and WEBHOOK_SECRET repository secrets, then run this workflow again"; exit 1
-          fi
-          # A fresh workers.dev subdomain needs a few minutes to get its TLS certificate.
+          # A fresh workers.dev subdomain needs a few minutes to get its TLS certificate; new secrets need a moment too.
+          sleep 10
           for i in $(seq 1 30); do
-            if curl -fsS -X POST -H "X-Cron-Secret: $CRON_SECRET" "$URL/setup"; then echo; exit 0; fi
+            if curl -fsS -X POST -H "X-Cron-Secret: $CRON_SECRET_VALUE" "$URL/setup"; then echo; exit 0; fi
             echo "  not ready yet, retrying in 20 s ($i/30)"; sleep 20
           done
           echo "::error::$URL/setup did not answer"; exit 1

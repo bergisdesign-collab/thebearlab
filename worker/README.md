@@ -37,13 +37,11 @@ Telegram ──webhook──► Cloudflare Worker ──► D1 (база бот�
 | `BOT_TOKEN` | токен от BotFather (новый, после `/revoke`) |
 | `NOTION_TOKEN` | API token подключения Notion (`ntn_…`) |
 | `ADMIN_IDS` | твой @username или Telegram id; несколько — через `;`, например `@me;@partner` |
-| `WEBHOOK_SECRET` | любая строка из латиницы и цифр, 30+ символов |
-| `CRON_SECRET` | ещё одна такая строка (другая) |
 
 ### 3. Выкладка
 
 GitHub → Actions → **Worker tests & deploy** → Run workflow. Сценарий: тесты → создание базы D1 →
-выкладка → секреты → регистрация webhook и меню команд в Telegram. Дальше каждый `git push` в `worker/`
+выкладка → секреты (пароли для webhook генерируются сами) → регистрация webhook и меню команд в Telegram. Дальше каждый `git push` в `worker/`
 выкладывает новую версию сам.
 
 ### 4. В Telegram
