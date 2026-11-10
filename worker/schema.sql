@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS entities (kind TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (kind, id));
+CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, ts TEXT NOT NULL, task_id TEXT NOT NULL, data TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS events_task ON events (task_id, ts);
+CREATE INDEX IF NOT EXISTS events_ts ON events (ts);

@@ -1,0 +1,20 @@
+name = "thebearlab-bot"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Notion sync + 09:00 / 18:00 / Friday jobs (times are checked in Moscow time inside the code)
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "thebearlab"
+database_id = "__D1_DATABASE_ID__"   # filled in by the deploy workflow
+
+# Run near the services we call most (Notion, AI) rather than near the visitor
+[placement]
+mode = "smart"
+
+[observability]
+enabled = true

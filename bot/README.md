@@ -1,4 +1,8 @@
-# the Bear Lab Bot (@TheBearLabBot)
+# the Bear Lab Bot — Python-версия (запасная)
+
+> Рабочая версия бота живёт в [`../worker`](../worker) (Cloudflare Workers, бесплатно).
+> Эта Python-версия с теми же функциями — запасной вариант для своего сервера (например, Hetzner):
+> `BOT_TOKEN=… NOTION_TOKEN=… python run_polling.py`.
 
 Telegram-штурман по роадмапу запуска TheBearLab. Источник правды — Notion (задачи, вехи, идеи),
 у бота своя копия в Firestore, две стороны синхронизируются автоматически.

@@ -1,0 +1,86 @@
+name: Worker tests & deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["worker/**", ".github/workflows/worker.yml"]
+  pull_request:
+    paths: ["worker/**"]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npx tsc --noEmit
+      - name: Bundle check
+        run: npx wrangler deploy --dry-run --outdir dist
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Cloudflare secrets are not configured yet — skipping deploy"; echo "go=no" >> "$GITHUB_OUTPUT"
+          else echo "go=yes" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.go == 'yes'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - if: steps.check.outputs.go == 'yes'
+        run: npm install --no-audit --no-fund
+      - name: Database (D1)
+        if: steps.check.outputs.go == 'yes'
+        run: |
+          find_id() { npx wrangler d1 list --json | jq -r '.[] | select(.name=="thebearlab") | (.uuid // .id)' | head -1; }
+          ID=$(find_id)
+          if [ -z "$ID" ]; then npx wrangler d1 create thebearlab; ID=$(find_id); fi
+          [ -n "$ID" ] || { echo "Could not create or find the D1 database"; exit 1; }
+          sed -i "s/__D1_DATABASE_ID__/$ID/" wrangler.toml
+      - name: Deploy
+        if: steps.check.outputs.go == 'yes'
+        run: |
+          npx wrangler deploy | tee "$RUNNER_TEMP/deploy.log"
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          [ -n "$URL" ] || { echo "No workers.dev URL — open Workers & Pages in the Cloudflare dashboard once to create your subdomain"; exit 1; }
+          echo "URL=$URL" >> "$GITHUB_ENV"
+      - name: Secrets
+        if: steps.check.outputs.go == 'yes'
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
+        run: |
+          jq -n --arg a "$BOT_TOKEN" --arg b "$NOTION_TOKEN" --arg c "$WEBHOOK_SECRET" --arg d "$CRON_SECRET" --arg e "$ADMIN_IDS" \
+            '{BOT_TOKEN:$a, NOTION_TOKEN:$b, WEBHOOK_SECRET:$c, CRON_SECRET:$d, ADMIN_IDS:$e} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+          npx wrangler secret bulk "$RUNNER_TEMP/s.json"
+          rm -f "$RUNNER_TEMP/s.json"
+      - name: Webhook, schema and bot menu
+        if: steps.check.outputs.go == 'yes'
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          sleep 5
+          curl -fsS -X POST -H "X-Cron-Secret: $CRON_SECRET" "$URL/setup"; echo
