@@ -36,7 +36,7 @@ Telegram ──webhook──► Cloudflare Worker ──► D1 (база бот�
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID |
 | `BOT_TOKEN` | токен от BotFather (новый, после `/revoke`) |
 | `NOTION_TOKEN` | API token подключения Notion (`ntn_…`) |
-| `ADMIN_IDS` | твой Telegram id (несколько — через `;`) |
+| `ADMIN_IDS` | твой @username или Telegram id; несколько — через `;`, например `@me;@partner` |
 | `WEBHOOK_SECRET` | любая строка из латиницы и цифр, 30+ символов |
 | `CRON_SECRET` | ещё одна такая строка (другая) |
 

@@ -108,8 +108,17 @@ describe("access", () => {
 
   it("ADMIN_IDS make a later user admin", async () => {
     await app.start(SERGEY);
-    const a2 = new App(st, clock, { adminIds: new Set([ANYA.id]) });
+    const a2 = new App(st, clock, { adminIds: new Set([String(ANYA.id)]) });
     await a2.start(ANYA);
+    assert.ok((await st.member(ANYA.id))!.admin);
+  });
+
+  it("ADMIN_IDS accept @usernames", async () => {
+    const { adminIds } = await import("../src/config.ts");
+    const admins = adminIds({ ADMIN_IDS: "111; @Anya ,@Sergey" });
+    assert.deepEqual([...admins], ["111", "anya", "sergey"]);
+    await app.start({ id: 5, name: "Первый" });
+    await new App(st, clock, { adminIds: admins }).start(ANYA);
     assert.ok((await st.member(ANYA.id))!.admin);
   });
 });

@@ -1,6 +1,6 @@
 // Bot brain, independent of Telegram transport.
 // Input: commands, callback data, free text. Output: Result (screen to show + notices to send).
-import { msk, notionUrl, addDays } from "./config.ts";
+import { addDays, isAdminListed, msk, notionUrl } from "./config.ts";
 import type { Clock } from "./config.ts";
 import * as logic from "./logic.ts";
 import { PRIORITIES, STAGES, STATUSES, isDone } from "./models.ts";
@@ -30,13 +30,13 @@ export const MENU: Btn[][] = [
   [B("Идеи", "go:ideas"), B("Новая задача", "go:new"), B("Команда", "go:team")],
 ];
 
-export interface AppOptions { adminIds?: Set<number>; syncFn?: () => Promise<string> }
+export interface AppOptions { adminIds?: Set<string>; syncFn?: () => Promise<string> }
 
 export class App {
   st: Storage;
   clock: Clock;
   svc: Service;
-  adminIds: Set<number>;
+  adminIds: Set<string>;
   syncFn?: () => Promise<string>;
 
   constructor(st: Storage, clock: Clock, opts: AppOptions = {}) {
@@ -66,7 +66,7 @@ export class App {
     let m = await this.st.member(who.id);
     if (m && m.approved) return R(S(`С возвращением, ${esc(m.name)}!\n\n${texts.HELP}`, MENU));
     const approved = (await this.st.members()).filter((x) => x.approved);
-    if (!approved.length || this.adminIds.has(who.id)) {
+    if (!approved.length || isAdminListed(this.adminIds, who.id, who.username)) {
       m = { tg_id: who.id, name: who.name, username: who.username || "", notion_user_id: m?.notion_user_id ?? null, approved: true, admin: true };
       await this.st.saveMember(m);
       return R(S(`Привет, ${esc(who.name)}! Ты администратор команды.\n\n`

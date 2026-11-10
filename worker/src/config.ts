@@ -38,8 +38,13 @@ export const JOBS: Record<string, { hour: number; minute: number; weekday: numbe
   weekly: { hour: 18, minute: 0, weekday: 4 },   // Friday (Mon = 0)
 };
 
-export function adminIds(env: Pick<Env, "ADMIN_IDS">): Set<number> {
-  return new Set((env.ADMIN_IDS || "").split(/[,; ]+/).filter(Boolean).map(Number).filter((n) => !isNaN(n)));
+/** ADMIN_IDS: Telegram ids and/or @usernames, separated by ; , or spaces (e.g. "123456789;@anya"). */
+export function adminIds(env: Pick<Env, "ADMIN_IDS">): Set<string> {
+  return new Set((env.ADMIN_IDS || "").split(/[,; ]+/).map((x) => x.trim().replace(/^@/, "").toLowerCase()).filter(Boolean));
+}
+
+export function isAdminListed(admins: Set<string>, id: number, username?: string): boolean {
+  return admins.has(String(id)) || (!!username && admins.has(username.toLowerCase()));
 }
 
 export type Clock = () => Date;
