@@ -19,7 +19,8 @@ export interface Env {
   NOTION_TOKEN?: string;
   ADMIN_IDS?: string;
   ANTHROPIC_API_KEY?: string;   // AI consultant (Haiku) + weekly review (Opus)
-  OPENAI_API_KEY?: string;      // voice messages → text
+  OPENAI_API_KEY?: string;      // voice messages → text (fallback; Workers AI is used by default)
+  AI?: { run(model: string, input: Record<string, unknown>): Promise<any> };   // Workers AI binding
   BOT_USERNAME?: string;
 }
 

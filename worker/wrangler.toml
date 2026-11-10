@@ -12,6 +12,10 @@ binding = "DB"
 database_name = "thebearlab"
 database_id = "__D1_DATABASE_ID__"   # filled in by the deploy workflow
 
+# Workers AI: Whisper for voice messages (free daily allocation)
+[ai]
+binding = "AI"
+
 # Run near the services we call most (Notion, AI) rather than near the visitor
 [placement]
 mode = "smart"

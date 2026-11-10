@@ -185,3 +185,31 @@ it("voice message → OpenAI transcription → AI answer, end to end through the
   assert.match(reply, /Сегодня срок/);
   assert.equal(llm.requests[0].messages.at(-1).content, "что у нас сегодня по срокам");
 });
+
+it("voice uses Cloudflare Workers AI by default (no OpenAI key needed)", async () => {
+  const d1 = new SqliteD1();
+  const tg = new FakeTelegram();
+  const seen: any[] = [];
+  const AI = { run: async (model: string, input: any) => { seen.push([model, input]); return { text: "покажи мои задачи" }; } };
+  const env: Env = { DB: d1, BOT_TOKEN: "123:T", WEBHOOK_SECRET: "s", CRON_SECRET: "c", ADMIN_IDS: "1", AI };
+  const fetchFn = async (url: string, init?: RequestInit): Promise<Response> => {
+    if (url.includes("/file/bot")) return new Response(new Uint8Array([104, 105]));
+    if (url.endsWith("/getFile")) return Response.json({ ok: true, result: { file_path: "v.oga" } });
+    if (url.includes("openai")) throw new Error("must not call OpenAI");
+    return tg.fetch(url, init);
+  };
+  const waits: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => { waits.push(p); } };
+  const deps = { clock, fetchFn, notion: null, llm: null };
+  const post = async (path: string, body: unknown, headers: Record<string, string>) => {
+    await handleFetch(new Request("https://x.workers.dev" + path, { method: "POST", body: JSON.stringify(body), headers }), env, ctx, deps);
+    await Promise.all(waits.splice(0));
+  };
+  await post("/setup", {}, { "X-Cron-Secret": "c" });
+  const from = { id: 1, is_bot: false, first_name: "Сергей" };
+  await post("/tg", { update_id: 1, message: { message_id: 1, date: 0, chat: { id: 1, type: "private" }, from, text: "/start" } }, { "X-Telegram-Bot-Api-Secret-Token": "s" });
+  await post("/tg", { update_id: 2, message: { message_id: 2, date: 0, chat: { id: 1, type: "private" }, from, voice: { file_id: "F" } } }, { "X-Telegram-Bot-Api-Secret-Token": "s" });
+  assert.equal(seen[0][0], "@cf/openai/whisper-large-v3-turbo");
+  assert.equal(seen[0][1].audio, btoa("hi"));
+  assert.match(tg.sent.at(-1)!.body.text, /🎙 <i>покажи мои задачи<\/i>/);   // without AI key: transcribed, then searched
+});

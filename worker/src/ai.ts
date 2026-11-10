@@ -57,6 +57,21 @@ export class AnthropicClient implements LlmApi {
 }
 
 // ---------------------------------------------------------------- speech to text
+// Default: Cloudflare Workers AI Whisper (free daily allocation, no extra key). Fallback: OpenAI.
+
+export interface WorkersAi { run(model: string, input: Record<string, unknown>): Promise<any> }
+
+function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+export async function transcribeCloudflare(audio: ArrayBuffer, ai: WorkersAi): Promise<string> {
+  const r = await ai.run("@cf/openai/whisper-large-v3-turbo", { audio: toBase64(audio), language: "ru" });
+  return String(r?.text || "").trim();
+}
 
 export async function transcribe(audio: ArrayBuffer, openaiKey: string, fetchFn: FetchFn = (i, init) => fetch(i, init)): Promise<string> {
   const form = new FormData();

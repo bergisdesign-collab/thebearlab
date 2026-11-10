@@ -3,7 +3,7 @@
 //   POST /setup    after each deploy: schema, webhook on this Worker's URL, bot menu (X-Cron-Secret)
 //   POST /tick     manual tick for debugging (X-Cron-Secret)
 //   cron */10      Notion sync + due jobs (09:00 / 18:00 / Fri 18:00 MSK)
-import { AnthropicClient, Assistant, transcribe } from "./ai.ts";
+import { AnthropicClient, Assistant, transcribe, transcribeCloudflare } from "./ai.ts";
 import type { LlmApi } from "./ai.ts";
 import { App } from "./app.ts";
 import { adminIds, realClock } from "./config.ts";
@@ -48,7 +48,17 @@ export function runtime(env: Env, deps: Deps = {}) {
       }
     };
   }
-  const voice = env.OPENAI_API_KEY ? (audio: ArrayBuffer) => transcribe(audio, env.OPENAI_API_KEY!, deps.fetchFn) : undefined;
+  const voice = env.AI
+    ? async (audio: ArrayBuffer) => {
+      try {
+        return await transcribeCloudflare(audio, env.AI!);
+      } catch (e) {
+        if (!env.OPENAI_API_KEY) throw e;
+        console.warn("Workers AI whisper failed, trying OpenAI", e);
+        return transcribe(audio, env.OPENAI_API_KEY, deps.fetchFn);
+      }
+    }
+    : env.OPENAI_API_KEY ? (audio: ArrayBuffer) => transcribe(audio, env.OPENAI_API_KEY!, deps.fetchFn) : undefined;
   const weeklyReview = llm ? () => new Assistant(app, llm, clock).weeklyReview() : undefined;
   const push = async (): Promise<void> => {
     if (!notion) return;
