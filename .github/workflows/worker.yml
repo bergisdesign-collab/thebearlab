@@ -72,6 +72,8 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # WEBHOOK_SECRET / CRON_SECRET are optional: if not set, fresh random ones are made on every deploy
           # (the webhook is re-registered below with the new value, so nothing else needs to know them).
@@ -80,7 +82,8 @@ jobs:
           echo "::add-mask::$WEBHOOK_SECRET"; echo "::add-mask::$CRON_SECRET"
           echo "CRON_SECRET_VALUE=$CRON_SECRET" >> "$GITHUB_ENV"
           jq -n --arg a "$BOT_TOKEN" --arg b "$NOTION_TOKEN" --arg c "$WEBHOOK_SECRET" --arg d "$CRON_SECRET" --arg e "$ADMIN_IDS" \
-            '{BOT_TOKEN:$a, NOTION_TOKEN:$b, WEBHOOK_SECRET:$c, CRON_SECRET:$d, ADMIN_IDS:$e} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+            --arg f "$ANTHROPIC_API_KEY" --arg g "$OPENAI_API_KEY" \
+            '{BOT_TOKEN:$a, NOTION_TOKEN:$b, WEBHOOK_SECRET:$c, CRON_SECRET:$d, ADMIN_IDS:$e, ANTHROPIC_API_KEY:$f, OPENAI_API_KEY:$g} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
           npx wrangler secret bulk "$RUNNER_TEMP/s.json"
           rm -f "$RUNNER_TEMP/s.json"
       - name: Webhook, schema and bot menu

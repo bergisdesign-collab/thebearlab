@@ -31,7 +31,9 @@ export async function markDone(st: Storage, job: string, now: Date): Promise<voi
   await st.kvSet(`ran:${job}:${t.date}`, t.iso);
 }
 
-export async function run(job: string, st: Storage, clock: Clock): Promise<Notice[]> {
+export interface JobExtras { weeklyReview?: () => Promise<string> }
+
+export async function run(job: string, st: Storage, clock: Clock, extras: JobExtras = {}): Promise<Notice[]> {
   const svc = new Service(st, clock);
   const today = msk(clock()).date;
   if (logic.isHoliday(today)) return [];
@@ -63,7 +65,17 @@ export async function run(job: string, st: Storage, clock: Clock): Promise<Notic
       else if (s) out.push({ chatId: Number(group), text: `День без просрочек ✅ Серия: ${logic.daysStr(s)}.`, kb: [] });
     }
   } else if (job === "weekly") {
-    if (group) out.push({ chatId: Number(group), text: await texts.weekly(st, today), kb: [[{ text: "Роадмап", data: "go:plan" }]] });
+    if (group) {
+      out.push({ chatId: Number(group), text: await texts.weekly(st, today), kb: [[{ text: "Роадмап", data: "go:plan" }]] });
+      if (extras.weeklyReview) {
+        try {
+          const review = await extras.weeklyReview();
+          if (review) out.push({ chatId: Number(group), text: texts.clip(`<b>🧠 Разбор недели</b>\n\n${texts.esc(review)}`), kb: [] });
+        } catch (e) {
+          console.error("weekly review failed", e);
+        }
+      }
+    }
   }
   return out;
 }

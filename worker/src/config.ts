@@ -18,6 +18,9 @@ export interface Env {
   CRON_SECRET?: string;
   NOTION_TOKEN?: string;
   ADMIN_IDS?: string;
+  ANTHROPIC_API_KEY?: string;   // AI consultant (Haiku) + weekly review (Opus)
+  OPENAI_API_KEY?: string;      // voice messages → text
+  BOT_USERNAME?: string;
 }
 
 export const BOT_NAME = "the Bear Lab Bot";

@@ -12,6 +12,7 @@ export const COMMANDS: [string, string][] = [
   ["milestones", "Вехи"],
   ["ideas", "Бэклог идей"],
   ["new", "Новая задача"],
+  ["ask", "Вопрос ИИ-консультанту"],
   ["find", "Поиск"],
   ["team", "Команда"],
   ["sync", "Синхронизация с Notion"],
@@ -60,6 +61,19 @@ export class TelegramApi {
     return this.call("setWebhook", { url, secret_token: secret || undefined, allowed_updates: ["message", "callback_query"] });
   }
 
+  typing(chatId: number) {
+    return this.call("sendChatAction", { chat_id: chatId, action: "typing" });
+  }
+
+  /** Download a file sent to the bot (voice message). */
+  async download(fileId: string): Promise<ArrayBuffer> {
+    const f = await this.call("getFile", { file_id: fileId });
+    if (!f.ok) throw new Error(f.description || "getFile failed");
+    this.calls += 1;
+    const r = await this.fetchFn(`https://api.telegram.org/file/bot${this.token}/${f.result.file_path}`);
+    return r.arrayBuffer();
+  }
+
   setCommands() {
     return this.call("setMyCommands", { commands: COMMANDS.map(([command, description]) => ({ command, description })) });
   }
@@ -78,8 +92,13 @@ export async function sendNotices(tg: TelegramApi, notices: Notice[]): Promise<v
 
 const who = (u: any): Who => ({ id: u.id, name: u.first_name || u.username || String(u.id), username: u.username || "" });
 
+export interface UpdateOptions {
+  /** Speech-to-text for voice messages; absent → voice is not supported. */
+  transcribe?: (audio: ArrayBuffer) => Promise<string>;
+}
+
 /** Route one Telegram update into the App and deliver the result. */
-export async function handleUpdate(update: any, app: App, tg: TelegramApi): Promise<void> {
+export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts: UpdateOptions = {}): Promise<void> {
   if (update.callback_query) {
     const cb = update.callback_query;
     const msg = cb.message;
@@ -98,13 +117,41 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi): Prom
   }
 
   const msg = update.message;
-  if (!msg || !msg.from || typeof msg.text !== "string") return;
+  if (!msg || !msg.from) return;
   const chatId: number = msg.chat.id;
   const isPrivate = msg.chat.type === "private";
-  const text: string = msg.text;
+  let text: string | undefined = typeof msg.text === "string" ? msg.text : undefined;
+  let prefix = "";
+
+  const voice = msg.voice || msg.audio;
+  if (!text && voice && isPrivate) {
+    if (!(await app.memberOf(who(msg.from)))) {
+      await tg.sendMessage(chatId, "Отправь /start, чтобы попасть в команду.");
+      return;
+    }
+    if (!opts.transcribe) {
+      await tg.sendMessage(chatId, "Голосовые пока не подключены — напиши текстом.");
+      return;
+    }
+    await tg.typing(chatId);
+    try {
+      text = await opts.transcribe(await tg.download(voice.file_id));
+    } catch (e) {
+      console.error("transcribe failed", e);
+      await tg.sendMessage(chatId, "Не получилось распознать голосовое — попробуй ещё раз или напиши текстом.");
+      return;
+    }
+    if (!text) {
+      await tg.sendMessage(chatId, "Не расслышал — попробуй ещё раз.");
+      return;
+    }
+    prefix = `🎙 <i>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</i>\n\n`;
+  }
+  if (typeof text !== "string") return;
+
   let res: Result | null;
   if (text.startsWith("/")) {
-    const [head, ...rest] = text.split(/\s+/);
+    const [head] = text.split(/\s+/);
     const cmd = head.slice(1).split("@")[0].toLowerCase();
     const mention = head.includes("@") ? head.split("@")[1] : "";
     if (mention && tg.botUsername && mention.toLowerCase() !== tg.botUsername.toLowerCase()) return;   // command for another bot
@@ -112,11 +159,13 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi): Prom
       await tg.sendMessage(chatId, "Напиши мне в личку /start, чтобы попасть в команду.");
       return;
     }
-    res = await app.onCommand(who(msg.from), chatId, isPrivate, cmd, text.slice(head.length).trim() || rest.join(" "));
+    if (cmd === "ask" && app.askFn) await tg.typing(chatId);
+    res = await app.onCommand(who(msg.from), chatId, isPrivate, cmd, text.slice(head.length).trim());
   } else {
+    if (isPrivate && app.askFn && !prefix) await tg.typing(chatId);
     res = await app.onText(who(msg.from), chatId, isPrivate, text);
   }
   if (!res) return;
-  if (res.screen) await tg.sendMessage(chatId, res.screen.text, res.screen.kb);
+  if (res.screen) await tg.sendMessage(chatId, prefix + res.screen.text, res.screen.kb);
   await sendNotices(tg, res.notices);
 }

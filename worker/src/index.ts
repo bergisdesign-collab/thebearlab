@@ -3,6 +3,8 @@
 //   POST /setup    after each deploy: schema, webhook on this Worker's URL, bot menu (X-Cron-Secret)
 //   POST /tick     manual tick for debugging (X-Cron-Secret)
 //   cron */10      Notion sync + due jobs (09:00 / 18:00 / Fri 18:00 MSK)
+import { AnthropicClient, Assistant, transcribe } from "./ai.ts";
+import type { LlmApi } from "./ai.ts";
 import { App } from "./app.ts";
 import { adminIds, realClock } from "./config.ts";
 import type { Clock, Env } from "./config.ts";
@@ -19,9 +21,9 @@ export interface Ctx { waitUntil(p: Promise<unknown>): void }
 const SYNC_BUDGET = 35;
 const PUSH_BUDGET = 25;
 
-export interface Deps { clock?: Clock; fetchFn?: FetchFn; notion?: NotionApi | null }
+export interface Deps { clock?: Clock; fetchFn?: FetchFn; notion?: NotionApi | null; llm?: LlmApi | null }
 
-export function runtime(env: Env & { BOT_USERNAME?: string }, deps: Deps = {}) {
+export function runtime(env: Env, deps: Deps = {}) {
   const clock = deps.clock || realClock;
   const st = new Storage(env.DB);
   const notion = deps.notion !== undefined ? deps.notion : env.NOTION_TOKEN ? new NotionClient(env.NOTION_TOKEN, deps.fetchFn) : null;
@@ -35,6 +37,19 @@ export function runtime(env: Env & { BOT_USERNAME?: string }, deps: Deps = {}) {
     return shortReport(rep);
   };
   const app = new App(st, clock, { adminIds: adminIds(env), syncFn: notion ? () => fullSync(true) : undefined });
+  const llm = deps.llm !== undefined ? deps.llm : env.ANTHROPIC_API_KEY ? new AnthropicClient(env.ANTHROPIC_API_KEY, deps.fetchFn) : null;
+  if (llm) {
+    app.askFn = async (m, text) => {
+      try {
+        return await new Assistant(app, llm, clock).ask(m, text);
+      } catch (e) {
+        console.error("ai failed", e);
+        return { screen: { text: "ИИ-консультант сейчас не ответил — попробуй через минуту. Пока можно воспользоваться меню или /find.", kb: [] }, notices: [] };
+      }
+    };
+  }
+  const voice = env.OPENAI_API_KEY ? (audio: ArrayBuffer) => transcribe(audio, env.OPENAI_API_KEY!, deps.fetchFn) : undefined;
+  const weeklyReview = llm ? () => new Assistant(app, llm, clock).weeklyReview() : undefined;
   const push = async (): Promise<void> => {
     if (!notion) return;
     const s = new Syncer(notion, new Storage(env.DB), clock, notion.calls + PUSH_BUDGET);
@@ -49,14 +64,14 @@ export function runtime(env: Env & { BOT_USERNAME?: string }, deps: Deps = {}) {
     st.refresh();
     const now = clock();
     for (const job of await jobs.due(st, now)) {
-      const notices = await jobs.run(job, st, clock);
+      const notices = await jobs.run(job, st, clock, { weeklyReview });
       await sendNotices(tg, notices);
       await jobs.markDone(st, job, now);
       out[job] = notices.length;
     }
     return out;
   };
-  return { clock, st, notion, tg, app, push, tick, fullSync };
+  return { clock, st, notion, tg, app, push, tick, fullSync, voice };
 }
 
 function secretOk(got: string | null, expected?: string): boolean {
@@ -77,12 +92,19 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
     }
     const update = await req.json();
     const rt = runtime(env, deps);
-    try {
-      await handleUpdate(update, rt.app, rt.tg);
-    } catch (e) {
-      console.error("update failed", e);   // still 200, otherwise Telegram retries forever
-    }
-    ctx.waitUntil(rt.push().catch((e) => console.error("push to Notion failed", e)));
+    // Answer Telegram at once and do the work after: AI answers can take several seconds.
+    ctx.waitUntil((async () => {
+      try {
+        await handleUpdate(update, rt.app, rt.tg, { transcribe: rt.voice });
+      } catch (e) {
+        console.error("update failed", e);
+      }
+      try {
+        await rt.push();
+      } catch (e) {
+        console.error("push to Notion failed", e);
+      }
+    })());
     return new Response("ok");
   }
 

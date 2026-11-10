@@ -30,7 +30,8 @@ export const MENU: Btn[][] = [
   [B("Идеи", "go:ideas"), B("Новая задача", "go:new"), B("Команда", "go:team")],
 ];
 
-export interface AppOptions { adminIds?: Set<string>; syncFn?: () => Promise<string> }
+export type AskFn = (m: Member, text: string) => Promise<Result>;
+export interface AppOptions { adminIds?: Set<string>; syncFn?: () => Promise<string>; askFn?: AskFn }
 
 export class App {
   st: Storage;
@@ -38,6 +39,7 @@ export class App {
   svc: Service;
   adminIds: Set<string>;
   syncFn?: () => Promise<string>;
+  askFn?: AskFn;      // AI consultant; when absent, free text is a search
 
   constructor(st: Storage, clock: Clock, opts: AppOptions = {}) {
     this.st = st;
@@ -45,7 +47,11 @@ export class App {
     this.svc = new Service(st, clock);
     this.adminIds = opts.adminIds || new Set();
     this.syncFn = opts.syncFn;
+    this.askFn = opts.askFn;
   }
+
+  /** Approved member for this Telegram user, or null. */
+  async memberOf(who: Who): Promise<Member | null> { return this.member(who); }
 
   today(): string { return msk(this.clock()).date; }
 
@@ -120,6 +126,10 @@ export class App {
         return R(args ? await this.scrSearch(args) : S("Напиши: /find ткань — или просто слово в личку."));
       case "sync":
         return this.triggerSync();
+      case "ask":
+        if (!this.askFn) return R(S("ИИ-консультант пока не подключён. Пока можно искать: /find слово."));
+        if (!args) return R(S("Напиши вопрос после команды: /ask что горит на этой неделе?"));
+        return this.askFn(m, args);
       case "cancel":
         return R(S("Ок, отменил.", MENU));
     }
@@ -140,6 +150,7 @@ export class App {
     text = (text || "").trim();
     const aw = await this.st.kvGet<Record<string, string>>(`await:${m.tg_id}`);
     if (aw) return this.onAwait(m, aw, text);
+    if (this.askFn) return this.askFn(m, text);
     return R(await this.scrSearch(text));
   }
 
@@ -316,9 +327,10 @@ export class App {
     return S(text, kb);
   }
 
-  private async after(m: Member, t: Task, prevOwner: number | null, toast: string): Promise<Result> {
+  /** Notices for the team about the events produced by the last action(s) on task t. */
+  async noticesFor(m: Member, t: Task, prevOwner: number | null): Promise<Notice[]> {
     const evs = this.svc.recent.filter((e) => e.task_id === t.id);
-    this.svc.recent = [];
+    this.svc.recent = this.svc.recent.filter((e) => e.task_id !== t.id);
     const notices: Notice[] = [];
     const group = await this.st.kvGet<number>("group_chat");
     if (group) {
@@ -336,6 +348,12 @@ export class App {
         }
       }
     }
+    return notices;
+  }
+
+  private async after(m: Member, t: Task, prevOwner: number | null, toast: string): Promise<Result> {
+    const notices = await this.noticesFor(m, t, prevOwner);
+    this.svc.recent = [];
     return R(await this.scrTask(m, t), { notices, toast });
   }
 
