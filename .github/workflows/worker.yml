@@ -81,6 +81,14 @@ jobs:
         if: steps.check.outputs.go == 'yes'
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
-          sleep 5
-          curl -fsS -X POST -H "X-Cron-Secret: $CRON_SECRET" "$URL/setup"; echo
+          if [ -z "$CRON_SECRET" ] || [ -z "$WEBHOOK_SECRET" ]; then
+            echo "::error::Add the CRON_SECRET and WEBHOOK_SECRET repository secrets, then run this workflow again"; exit 1
+          fi
+          # A fresh workers.dev subdomain needs a few minutes to get its TLS certificate.
+          for i in $(seq 1 30); do
+            if curl -fsS -X POST -H "X-Cron-Secret: $CRON_SECRET" "$URL/setup"; then echo; exit 0; fi
+            echo "  not ready yet, retrying in 20 s ($i/30)"; sleep 20
+          done
+          echo "::error::$URL/setup did not answer"; exit 1
