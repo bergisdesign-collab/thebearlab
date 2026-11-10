@@ -105,6 +105,7 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
     // Answer Telegram at once and do the work after: AI answers can take several seconds.
     ctx.waitUntil((async () => {
       try {
+        rt.tg.botUsername ||= (await rt.st.kvGet<string>("bot_username")) || undefined;
         await handleUpdate(update, rt.app, rt.tg, { transcribe: rt.voice });
       } catch (e) {
         console.error("update failed", e);
@@ -125,8 +126,10 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
     await rt.st.ensureSchema();
     const hook = `https://${url.host}/tg`;
     const wh = await rt.tg.setWebhook(hook, env.WEBHOOK_SECRET);
+    const username = await rt.tg.username();
+    if (username) await rt.st.kvSet("bot_username", username);
     const cmds = await rt.tg.setCommands();
-    return Response.json({ webhook: hook, ok: wh.ok && cmds.ok, telegram: wh.description || "" });
+    return Response.json({ webhook: hook, ok: wh.ok && cmds.ok, telegram: wh.description || "", username });
   }
 
   return new Response("not found", { status: 404 });

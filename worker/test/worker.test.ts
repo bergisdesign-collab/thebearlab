@@ -35,7 +35,7 @@ it("webhook, tick and setup", async () => {
   assert.equal((await call("/setup", {})).status, 403);
   const s = await call("/setup", {}, C);
   assert.equal((await s.json()).webhook, "https://bot.example.workers.dev/tg");
-  assert.deepEqual(tg.methods(), ["setWebhook", "setMyCommands"]);
+  assert.deepEqual(tg.methods(), ["setWebhook", "getMe", "setMyCommands"]);
   assert.equal(tg.sent[0].body.secret_token, "s3cret");
 
   assert.equal((await call("/tg", msg(1, "/start"), { "X-Telegram-Bot-Api-Secret-Token": "bad" })).status, 403);
@@ -79,6 +79,25 @@ it("group /start points to the private chat", async () => {
   const H = { "X-Telegram-Bot-Api-Secret-Token": "s3cret" };
   await call("/setup", {}, { "X-Cron-Secret": "cr0n" });
   tg.sent = [];
-  await call("/tg", { update_id: 1, message: { message_id: 1, date: 0, chat: { id: -5, type: "group" }, from: user, text: "/start@TheBearLabBot" } }, H);
+  await call("/tg", { update_id: 1, message: { message_id: 1, date: 0, chat: { id: -5, type: "group" }, from: user, text: "/start@BearLabTaskManager_bot" } }, H);
   assert.match(tg.sent[0].body.text, /в личку/);
+});
+
+it("in a group the bot answers @mentions and replies to its messages, and ignores the rest", async () => {
+  const { tg, call } = setup();
+  const H = { "X-Telegram-Bot-Api-Secret-Token": "s3cret" };
+  await call("/setup", {}, { "X-Cron-Secret": "cr0n" });
+  await call("/tg", msg(1, "/start"), H);
+  const g = (n: number, text: string, extra: any = {}) => ({ update_id: n, message: { message_id: 100 + n, date: 0, chat: { id: -7, type: "supergroup" }, from: user, text, ...extra } });
+  tg.sent = [];
+  await call("/tg", g(2, "обычный разговор"), H);
+  assert.equal(tg.sent.length, 0);
+  await call("/tg", g(3, "@BearLabTaskManager_bot ткань"), H);
+  let last = tg.sent.at(-1)!;
+  assert.equal(last.body.chat_id, -7);
+  assert.equal(last.body.reply_parameters.message_id, 103);
+  assert.match(last.body.text, /ткань/);
+  tg.sent = [];
+  await call("/tg", g(4, "а что по ткани?", { reply_to_message: { message_id: 5, from: { id: 999, is_bot: true, username: "BearLabTaskManager_bot" } } }), H);
+  assert.match(tg.sent.at(-1)!.body.text, /ткан/i);
 });

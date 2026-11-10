@@ -47,8 +47,20 @@ export class TelegramApi {
     return data;
   }
 
-  sendMessage(chatId: number, text: string, kb?: Btn[][]) {
-    return this.call("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: keyboard(kb || []) });
+  sendMessage(chatId: number, text: string, kb?: Btn[][], replyTo?: number) {
+    return this.call("sendMessage", {
+      chat_id: chatId, text, parse_mode: "HTML", link_preview_options: { is_disabled: true }, reply_markup: keyboard(kb || []),
+      reply_parameters: replyTo ? { message_id: replyTo, allow_sending_without_reply: true } : undefined,
+    });
+  }
+
+  /** The bot's @username (without @), asked from Telegram once and cached on the object. */
+  async username(): Promise<string> {
+    if (!this.botUsername) {
+      const me = await this.call("getMe", {});
+      this.botUsername = me.ok ? me.result.username : "";
+    }
+    return this.botUsername || "";
   }
 
   editMessage(chatId: number, messageId: number, text: string, kb?: Btn[][]) {
@@ -153,6 +165,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
   if (typeof text !== "string") return;
 
   let res: Result | null;
+  let replyTo: number | undefined;
   if (text.startsWith("/")) {
     const [head] = text.split(/\s+/);
     const cmd = head.slice(1).split("@")[0].toLowerCase();
@@ -164,12 +177,23 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
     }
     if (cmd === "ask" && app.askFn) await tg.typing(chatId);
     res = await app.onCommand(who(msg.from), chatId, isPrivate, cmd, text.slice(head.length).trim());
+  } else if (!isPrivate) {
+    // In a group the bot answers only when addressed: @mention or a reply to its message.
+    const me = (await tg.username()).toLowerCase();
+    const mentioned = !!me && text.toLowerCase().includes("@" + me);
+    const r = msg.reply_to_message?.from;
+    const replyToBot = !!r?.is_bot && (!me || (r.username || "").toLowerCase() === me);
+    if (!mentioned && !replyToBot) return;
+    const q = me ? text.replace(new RegExp("@" + me, "ig"), " ").replace(/\s+/g, " ").trim() : text;
+    if (app.askFn) await tg.typing(chatId);
+    res = await app.onGroupText(who(msg.from), chatId, q);
+    replyTo = msg.message_id;
   } else {
-    if (isPrivate && app.askFn && !prefix) await tg.typing(chatId);
+    if (app.askFn && !prefix) await tg.typing(chatId);
     res = await app.onText(who(msg.from), chatId, isPrivate, text);
   }
   console.log("result", JSON.stringify({ screen: res ? res.screen?.text.slice(0, 80) : null, notices: res?.notices.length }));
   if (!res) return;
-  if (res.screen) await tg.sendMessage(chatId, prefix + res.screen.text, res.screen.kb);
+  if (res.screen) await tg.sendMessage(chatId, prefix + res.screen.text, res.screen.kb, replyTo);
   await sendNotices(tg, res.notices);
 }

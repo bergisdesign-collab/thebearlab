@@ -157,6 +157,7 @@ export class FakeTelegram {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     this.sent.push({ method, body });
     if (method === "editMessageText" && body.text === "__fail__") return Response.json({ ok: false, description: "Bad Request" });
+    if (method === "getMe") return Response.json({ ok: true, result: { id: 999, is_bot: true, username: "BearLabTaskManager_bot" } });
     return Response.json({ ok: true, result: { message_id: this.sent.length } });
   };
   methods(): string[] { return this.sent.map((s) => s.method); }

@@ -154,6 +154,16 @@ export class App {
     return R(await this.scrSearch(text));
   }
 
+  /** A group message addressed to the bot (@mention or reply). */
+  async onGroupText(who: Who, chatId: number, text: string): Promise<Result | null> {
+    this.svc.recent = [];
+    const m = await this.member(who);
+    if (!m) return R(S("Чтобы я отвечал тебе, напиши мне в личку /start — администратор примет заявку."));
+    if (!text) return R(S("Я здесь. Спроси что-нибудь, например: «что горит на этой неделе?» — или открой меню.", MENU));
+    if (this.askFn) return this.askFn(m, text);
+    return R(await this.scrSearch(text));
+  }
+
   async onCallback(who: Who, chatId: number, data: string): Promise<Result> {
     this.svc.recent = [];
     const m = await this.member(who);
