@@ -164,6 +164,7 @@ export class FakeTelegram {
     const body = init?.body ? JSON.parse(String(init.body)) : {};
     this.sent.push({ method, body });
     if (method === "editMessageText" && body.text === "__fail__") return Response.json({ ok: false, description: "Bad Request" });
+    if (method === "getChat") return Response.json(String(body.chat_id) === "@nochannel" ? { ok: false, description: "Bad Request: chat not found" } : { ok: true, result: { id: -1001234567890, type: "channel", title: "TBL история" } });
     if (method === "getMe") return Response.json({ ok: true, result: { id: 999, is_bot: true, username: "BearLabTaskManager_bot" } });
     return Response.json({ ok: true, result: { message_id: this.sent.length } });
   };

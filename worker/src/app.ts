@@ -120,6 +120,27 @@ export class App {
         await this.st.kvSet("group_chat", chatId);
         if ((await getGroupPrefs(this.st)).pinned) await this.st.kvSet("pin_wanted", true);
         return R(S("Готово! Сюда будут приходить: сводка в 09:00, вечерняя сверка в 18:00, план недели в понедельник, итоги в пятницу и все взятия/снятия/закрытия задач. Ещё закреплю живую сводку — для этого дай мне права администратора с правом закреплять сообщения."));
+      case "channel": {
+        if (!m.admin) return R(S("Канал подключает администратор."));
+        if (!isPrivate) return R(S("Отправь /channel мне в личку."));
+        const cur = await this.st.kvGet<number>("log_channel");
+        if (!args) {
+          await this.st.kvSet(`await:${m.tg_id}`, { a: "channel" });
+          return R(S(`<b>Канал с историей работы</b>\n${cur ? "Подключён ✅" : "Не подключён."}\n\n`
+            + "Как подключить:\n1. Создай канал в Telegram (можно закрытый).\n2. Добавь меня в администраторы канала с правом публиковать сообщения.\n"
+            + "3. Пришли сюда <code>/channel @имя_канала</code> — или просто перешли мне любой пост из канала (для закрытого).\n\n"
+            + "Что будет в канале: лента действий (что сделано, поставлено, взято) каждые 10 минут и «Дневник дня» в 21:00 — итоги и что впереди. Заметки и ответы на чек-ин в канал не попадают.\n"
+            + "Отключить: <code>/channel off</code>", MENU));
+        }
+        if (/^(off|выкл|нет)$/i.test(args)) {
+          await this.st.kvDel("log_channel");
+          return R(S("Канал отключён — больше ничего туда не пишу.", MENU));
+        }
+        const raw = args.split(/\s+/)[0].replace(/^https?:\/\/t\.me\//, "@");
+        if (!/^(@[A-Za-z0-9_]{4,}|-100\d{5,})$/.test(raw)) return R(S("Не понял канал. Пример: <code>/channel @thebearlab_log</code>, или перешли мне пост из канала."));
+        await this.st.kvSet("channel_pending", { raw, by: m.tg_id });
+        return R(S("Проверяю доступ к каналу — сейчас пришлю результат."));
+      }
       case "pin":
         if (isPrivate) return R(S("Отправь /pin в общем чате — там закреплю живую сводку."));
         if (Number(await this.st.kvGet("group_chat")) !== chatId) return R(S("Сначала привяжи этот чат: /bindchat."));
@@ -572,6 +593,7 @@ export class App {
     }
     if (a === "new") return R(S("Выбери этап кнопкой выше или отправь /cancel."));
     if (a === "checkin") return this.checkinAnswer(m, aw, text);
+    if (a === "channel") { await this.st.kvDel(key); return this.onCommand({ id: m.tg_id, name: m.name, username: m.username }, m.tg_id, true, "channel", text); }
     const t = await this.st.task(aw.t || "");
     await this.st.kvDel(key);
     if (!t) return R(S("Задача не найдена.", MENU));
@@ -588,6 +610,11 @@ export class App {
       return this.after(m, await this.svc.setDue(t, m, d), prev, "");
     }
     return R(S("Ок.", MENU));
+  }
+
+  /** After /channel the next forwarded channel post connects that channel. */
+  async wantsChannel(tgId: number): Promise<boolean> {
+    return (await this.st.kvGet<Record<string, string>>(`await:${tgId}`))?.a === "channel";
   }
 
   /** Monday plan buttons: accept one item, skip one, or accept everything left. */

@@ -393,7 +393,7 @@ describe("jobs", () => {
     assert.deepEqual(await jobs.due(st, fri), ["evening", "weekly"]);
     await jobs.markDone(st, "evening", fri);
     assert.deepEqual(await jobs.due(st, fri), ["weekly"]);
-    assert.deepEqual(await jobs.due(st, new Date("2026-11-06T18:00:00Z")), []);
+    assert.deepEqual(await jobs.due(st, new Date("2026-11-06T18:00:00Z")), ["diary"]);
     assert.ok(!(await jobs.due(st, new Date("2026-11-05T15:05:00Z"))).includes("weekly"));
   });
 });

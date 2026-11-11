@@ -21,6 +21,7 @@ import { getGroupPrefs, getPrefs } from "./prefs.ts";
 import { burndown, burndownLine, chartUrl } from "./burndown.ts";
 import { heuristicPlan, planInput, planNotice } from "./plan.ts";
 import type { PlanInput, PlanItem } from "./plan.ts";
+import { diaryPost } from "./channel.ts";
 
 const MORNING_KB: Btn[][] = [[{ text: "Мой кабинет", data: "go:my" }, { text: "Что дальше", data: "go:next" }]];
 
@@ -57,6 +58,11 @@ export interface JobExtras {
 
 export async function run(job: string, st: Storage, clock: Clock, extras: JobExtras = {}): Promise<Notice[]> {
   if (job === "selfcheck") return selfcheck(st, extras);
+  if (job === "diary") {
+    if (!(await getGroupPrefs(st)).diary) return [];
+    const d = await diaryPost(st, msk(clock()).date);
+    return d ? [d] : [];
+  }
   const svc = new Service(st, clock);
   const today = msk(clock()).date;
   if (logic.isHoliday(today)) return [];

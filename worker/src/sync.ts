@@ -173,6 +173,7 @@ export class Syncer {
     // Re-read right before writing so edits made in the bot meanwhile are not overwritten.
     this.st.refresh("task");
     const local = new Map((await this.st.tasks(true)).map((t) => [t.id, t]));
+    const firstPull = local.size === 0;
     for (const [pid, { p, remote }] of remotes) {
       const lid = this.n2l.get(pid)!;
       const cur = local.get(lid);
@@ -183,6 +184,11 @@ export class Syncer {
       t.notion_edited = p.last_edited_time || "";
       t.archived = false;
       if (JSON.stringify(t) !== before) await this.st.saveTask(t);
+      // done or created right in Notion → into the history like any bot action
+      if (!firstPull && ((cur && !isDone(cur) && isDone(t)) || !cur)) {
+        const iso = msk(this.clock()).iso;
+        await this.st.addEvent({ id: crypto.randomUUID().replace(/-/g, ""), ts: iso, task_id: t.id, actor: "Notion", kind: cur ? "done" : "create", text: cur ? "выполнена (отмечено в Notion)" : "создана в Notion" });
+      }
       // someone was put on the task in Notion → their cabinet gets a card
       if (cur && t.assignee_tg && t.assignee_tg !== cur.assignee_tg && !isDone(t)) (this.r.assigned ||= []).push([t.id, t.assignee_tg]);
     }

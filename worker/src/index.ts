@@ -14,6 +14,8 @@ import * as jobs from "./jobs.ts";
 import { NotionClient, pageText } from "./notion.ts";
 import { adminAlert, countError, problems } from "./alerts.ts";
 import { refreshPinned } from "./pinned.ts";
+import { feedPost } from "./channel.ts";
+import { getGroupPrefs } from "./prefs.ts";
 import { takeDueReminders } from "./reminders.ts";
 import { msk } from "./config.ts";
 import type { FetchFn, NotionApi } from "./notion.ts";
@@ -105,6 +107,35 @@ export function runtime(env: Env, deps: Deps = {}) {
       aiErrors: await errs("ai"), jobErrors: await errs("job"),
     }, clock().getTime(), !!notion);
   };
+  // /channel asked to connect a channel: check it here, where Telegram can be asked
+  const channelBind = async (): Promise<void> => {
+    const p = await st.kvGet<{ raw: string; by: number }>("channel_pending");
+    if (!p) return;
+    await st.kvDel("channel_pending");
+    const chat: any = await tg.call("getChat", { chat_id: /^-?\d+$/.test(p.raw) ? Number(p.raw) : p.raw });
+    if (!chat.ok || chat.result?.type !== "channel") {
+      await tg.sendMessage(p.by, `Не нашёл такой канал${chat.description ? ` (${chat.description})` : ""}. Проверь имя и что я добавлен в канал администратором.`);
+      return;
+    }
+    const id = Number(chat.result.id);
+    const test: any = await tg.call("sendMessage", { chat_id: id, text: "🧸 Здесь будет история работы TheBearLab: что сделано, что поставили и что впереди.", disable_notification: true });
+    if (!test.ok) {
+      await tg.sendMessage(p.by, `Канал нашёл, но писать туда не могу: ${test.description || "нет прав"}. Сделай меня администратором канала с правом «Публикация сообщений» и пришли /channel ещё раз.`);
+      return;
+    }
+    await st.kvSet("log_channel", id);
+    await st.kvSet("channel_cursor", msk(clock()).iso);
+    await tg.sendMessage(p.by, `Канал «${(chat.result.title || "").replace(/</g, "&lt;")}» подключён ✅ Лента действий пойдёт туда каждые 10 минут, дневник дня — в 21:00. Выключить отдельно можно в /settings.`);
+  };
+  const feed = async (): Promise<number> => {
+    if (!(await getGroupPrefs(st)).feed) return 0;
+    const post = await feedPost(st, clock);
+    if (!post) return 0;
+    const r: any = await tg.call("sendMessage", { chat_id: post.notice.chatId, text: post.notice.text, parse_mode: "HTML", disable_notification: true, link_preview_options: { is_disabled: true } });
+    if (r.ok) { await st.kvSet("channel_cursor", post.cursor); return 1; }
+    await alert("channel", `Не получается писать в канал с историей: ${r.description || "ошибка"}. Проверь, что бот — администратор канала.`);
+    return 0;
+  };
   const pinned = async (): Promise<string> => {
     try { return await refreshPinned(st, tg, clock); } catch (e) { console.error("pinned failed", e); return "error"; }
   };
@@ -166,6 +197,7 @@ export function runtime(env: Env, deps: Deps = {}) {
       await jobs.markDone(st, job, now);
     }
     out.pinned = await pinned();
+    try { out.feed = await feed(); } catch (e) { console.error("feed failed", e); }
     try { out.remembered = await extractConclusions(); } catch (e) { console.error("extract failed", e); }
     return out;
   };
@@ -181,7 +213,7 @@ export function runtime(env: Env, deps: Deps = {}) {
     if (!(await sendBoard(app, tg, chatId, m))) await tg.sendMessage(chatId, "Не получилось показать доску. Обнови Telegram до последней версии — виджеты появились совсем недавно.");
   };
   const widget = async (q: any): Promise<void> => { await sendNotices(tg, await handleBoardQuery(app, tg, q)); };
-  return { clock, st, notion, tg, app, push, tick, fullSync, voice, bufferGroup, panel, board, widget, pinned, health };
+  return { clock, st, notion, tg, app, push, tick, fullSync, voice, bufferGroup, panel, board, widget, pinned, health, channelBind };
 }
 
 function secretOk(got: string | null, expected?: string): boolean {
@@ -216,6 +248,7 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
         console.error("push to Notion failed", e);
       }
       await rt.pinned();
+      try { await rt.channelBind(); } catch (e) { console.error("channel bind failed", e); }
     })());
     return new Response("ok");
   }

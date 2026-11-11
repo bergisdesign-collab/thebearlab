@@ -434,3 +434,52 @@ it("joint task set up in Notion (two people) shows 🤝 and is in both cabinets"
   await w.text(ANYA, w.dm(ANYA), "/my");
   assert.match(w.tg.shown(), /🤝 Утвердить гейм-диздок/);
 });
+
+it("history channel: /channel connects it, actions flow in as a feed, the diary sums up the day", async () => {
+  const w = await world();
+  await w.text(ME, w.dm(ME), "/channel");
+  assert.match(w.tg.shown(), /Канал с историей работы/);
+  // a forwarded channel post right after /channel connects that channel
+  w.tg.sent = [];
+  await w.post("/tg", { update_id: 900, message: { message_id: 900, date: 0, chat: w.dm(ME), from: ME, text: "пост", forward_origin: { type: "channel", chat: { id: -1001234567890, type: "channel" } } } });
+  assert.ok(w.tg.sent.some((x) => x.method === "getChat"));
+  assert.ok(w.tg.sent.some((x) => x.method === "sendMessage" && x.body.chat_id === -1001234567890));
+  assert.match(said(dmTo(w, ME.id)), /подключён ✅/);
+  assert.equal(await w.st().kvGet("log_channel"), -1001234567890);
+  // non-admin cannot, a wrong name is explained
+  await w.text(ANYA, w.dm(ANYA), "/channel @something");
+  assert.match(w.tg.shown(), /администратор/);
+  await w.text(ME, w.dm(ME), "/channel @nochannel");
+  assert.match(said(dmTo(w, ME.id)), /Не нашёл такой канал/);
+  assert.equal(await w.st().kvGet("log_channel"), -1001234567890);
+  // actions → feed on the next tick (the world clock is fixed, so move the cursor back)
+  await w.st().kvSet("channel_cursor", "2026-11-05T08:59:00+03:00");
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  await w.press(ME, w.dm(ME), `t:note:${w.ids.t_fabric}`);
+  await w.text(ME, w.dm(ME), "секретная заметка");
+  await w.press(ME, w.dm(ME), `t:st:${w.ids.t_fabric}:3`);
+  w.tg.sent = [];
+  await w.post("/tick", {});
+  const post = w.tg.sent.find((x) => x.body.chat_id === -1001234567890)!;
+  assert.match(post.body.text, /Лента TheBearLab[\s\S]*🙋 <b>Сергей<\/b>: «Найти поставщика ткани»[\s\S]*✅/);
+  assert.ok(!/секретная/.test(post.body.text));
+  w.tg.sent = [];
+  await w.post("/tick", {});
+  assert.ok(!w.tg.sent.some((x) => x.body.chat_id === -1001234567890 && /Лента/.test(x.body.text || "")));   // nothing new, nothing posted
+  // the diary
+  const d = await jobs.run("diary", w.st(), at("2026-11-05T18:00:00Z"));
+  assert.equal(d[0].chatId, -1001234567890);
+  assert.match(d[0].text, /Дневник TheBearLab · 05\.11[\s\S]*Сделано сегодня \(1\)[\s\S]*Найти поставщика ткани/);
+  await w.text(ME, w.dm(ME), "/channel off");
+  assert.equal(await w.st().kvGet("log_channel"), null);
+});
+
+it("tasks done or created right in Notion appear in the history", async () => {
+  const w = await world();
+  w.fn.edit(w.ids.t_fabric, "Статус", { type: "status", status: { name: "Готово" } });
+  w.fn.add(NOTION_TASKS_DB, (await import("./fakes.ts")).taskProps("Новая задача из Notion"));
+  await w.post("/tick", {});
+  const evs = await w.st().events("");
+  assert.ok(evs.some((e) => e.actor === "Notion" && e.kind === "done" && e.task_id === w.ids.t_fabric));
+  assert.ok(evs.some((e) => e.actor === "Notion" && e.kind === "create"));
+});

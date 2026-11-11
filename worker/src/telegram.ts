@@ -26,6 +26,7 @@ export const COMMANDS: [string, string, boolean][] = [
   ["window", "Одно окно в личке: вкл/выкл", true],
   ["sync", "Синхронизация с Notion", true],
   ["pin", "Закрепить живую сводку в чате", true],
+  ["channel", "Канал с историей работы", true],
   ["help", "Что умеет бот", true],
 ];
 
@@ -260,6 +261,10 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
   if (!msg || !msg.from) return;
   const chatId: number = msg.chat.id;
   const isPrivate = msg.chat.type === "private";
+  // a post forwarded from a channel right after /channel = «connect this channel» (works for private channels)
+  if (isPrivate && msg.forward_origin?.type === "channel" && msg.forward_origin.chat?.id && await app.wantsChannel(msg.from.id)) {
+    msg.text = `/channel ${msg.forward_origin.chat.id}`;
+  }
   let text: string | undefined = typeof msg.text === "string" ? msg.text : undefined;
   let heard = "";
 
