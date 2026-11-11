@@ -234,3 +234,37 @@ it("answers become plain Telegram HTML; «Темы:» turn into buttons that con
   assert.equal(llm.requests[1].messages.at(-1).content, "Риски вехи");
   assert.match(r2.screen!.text, /По вехе/);
 });
+
+it("voice notes in a group: answered only when they start or end with «бро»", async () => {
+  const d1 = new SqliteD1();
+  const tg = new FakeTelegram();
+  let said = "бро, покажи мои задачи";
+  const AI = { run: async () => ({ text: said }) };
+  const env: Env = { DB: d1, BOT_TOKEN: "123:T", WEBHOOK_SECRET: "s", CRON_SECRET: "c", ADMIN_IDS: "1", AI };
+  const fetchFn = async (url: string, init?: RequestInit): Promise<Response> => {
+    if (url.includes("/file/bot")) return new Response(new Uint8Array([1]));
+    if (url.endsWith("/getFile")) return Response.json({ ok: true, result: { file_path: "v.oga" } });
+    return tg.fetch(url, init);
+  };
+  const waits: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => { waits.push(p); } };
+  const deps = { clock, fetchFn, notion: null, llm: null };
+  const post = async (path: string, body: unknown, headers: Record<string, string>) => {
+    await handleFetch(new Request("https://x.workers.dev" + path, { method: "POST", body: JSON.stringify(body), headers }), env, ctx, deps);
+    await Promise.all(waits.splice(0));
+  };
+  const H = { "X-Telegram-Bot-Api-Secret-Token": "s" };
+  await post("/setup", {}, { "X-Cron-Secret": "c" });
+  const from = { id: 1, is_bot: false, first_name: "Сергей" };
+  await post("/tg", { update_id: 1, message: { message_id: 1, date: 0, chat: { id: 1, type: "private" }, from, text: "/start" } }, H);
+  const gv = (n: number) => ({ update_id: n, message: { message_id: n, date: 0, chat: { id: -9, type: "supergroup" }, from, voice: { file_id: "F" + n } } });
+  tg.sent = [];
+  await post("/tg", gv(2), H);
+  const reply = tg.sent.filter((x) => x.method === "sendMessage").at(-1)!;
+  assert.equal(reply.body.chat_id, -9);
+  assert.match(reply.body.text, /🎙 <i>бро, покажи мои задачи<\/i>/);
+  tg.sent = [];
+  said = "Даша спит, не могу проверить";
+  await post("/tg", gv(3), H);
+  assert.equal(tg.sent.filter((x) => x.method === "sendMessage").length, 0);   // ordinary voice chat is ignored
+});

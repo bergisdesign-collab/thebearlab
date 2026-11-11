@@ -114,5 +114,9 @@ it("nickname parsing", async () => {
   assert.equal(stripNickname("БРО перенеси ткань"), "перенеси ткань");
   assert.equal(stripNickname("бро"), "");
   assert.equal(stripNickname("брокер звонил"), null);
-  assert.equal(stripNickname("привет бро"), null);
+  assert.equal(stripNickname("так и че бро"), "так и че");
+  assert.equal(stripNickname("ты тут, бро?"), "ты тут?");
+  assert.equal(stripNickname("Брат, глянь сроки"), "глянь сроки");
+  assert.equal(stripNickname("бронь на завтра готова"), null);
+  assert.equal(stripNickname("я бро не знаю что делать"), null);
 });

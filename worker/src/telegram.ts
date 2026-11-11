@@ -107,13 +107,16 @@ export async function sendNotices(tg: TelegramApi, notices: Notice[]): Promise<v
 const who = (u: any): Who => ({ id: u.id, name: u.first_name || u.username || String(u.id), username: u.username || "" });
 
 /** Words that address the bot in a group when a message starts with them («Бро, что горит?»). */
-export const NICKNAMES = ["бро", "bro", "бот"];
+export const NICKNAMES = ["бро", "bro", "бот", "брат", "братан"];
 
-/** If the message starts with a nickname, returns the rest of it; otherwise null. */
+/** If the message starts or ends with a nickname («Бро, что горит?», «так и че, бро?»), returns the rest; otherwise null. */
 export function stripNickname(text: string, nicknames: string[] = NICKNAMES): string | null {
-  const m = text.trim().match(/^([\p{L}]+)[\s,.:!?—-]*(.*)$/su);
-  if (!m || !nicknames.includes(m[1].toLowerCase())) return null;
-  return m[2].trim();
+  const t = text.trim();
+  const head = t.match(/^([\p{L}]+)[\s,.:!?…—-]*(.*)$/su);
+  if (head && nicknames.includes(head[1].toLowerCase())) return head[2].trim();
+  const tail = t.match(/^(.*?)[\s,.:—-]+([\p{L}]+)\s*([?!.…]*)$/su);
+  if (tail && nicknames.includes(tail[2].toLowerCase())) return (tail[1].trim() + (tail[3].includes("?") ? "?" : "")).trim();
+  return null;
 }
 
 export interface UpdateOptions {
@@ -141,7 +144,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
   }
 
   const msg = update.message;
-  console.log("update", JSON.stringify({ id: update.update_id, chat: msg?.chat?.type, text: typeof msg?.text === "string" ? msg.text.slice(0, 60) : undefined, voice: !!msg?.voice, keys: Object.keys(msg || update) }));
+  console.log("update", JSON.stringify({ id: update.update_id, chat: msg?.chat?.type, text: msg?.chat?.type === "private" && typeof msg?.text === "string" ? msg.text.slice(0, 60) : undefined, voice: !!msg?.voice, keys: Object.keys(msg || update) }));
   if (!msg || !msg.from) return;
   const chatId: number = msg.chat.id;
   const isPrivate = msg.chat.type === "private";
@@ -149,28 +152,33 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
   let prefix = "";
 
   const voice = msg.voice || msg.audio;
-  if (!text && voice && isPrivate) {
-    if (!(await app.memberOf(who(msg.from)))) {
+  let voiceInGroup = false;
+  if (!text && voice) {
+    if (isPrivate && !(await app.memberOf(who(msg.from)))) {
       await tg.sendMessage(chatId, "Отправь /start, чтобы попасть в команду.");
       return;
     }
     if (!opts.transcribe) {
-      await tg.sendMessage(chatId, "Голосовые пока не подключены — напиши текстом.");
+      if (isPrivate) await tg.sendMessage(chatId, "Голосовые пока не подключены — напиши текстом.");
       return;
     }
-    await tg.typing(chatId);
+    // In a group every voice note is transcribed, but the bot answers only if it starts/ends with «бро».
+    // Nothing is stored: the text lives only while this message is processed.
+    if (isPrivate) await tg.typing(chatId);
     try {
       text = await opts.transcribe(await tg.download(voice.file_id));
     } catch (e) {
       console.error("transcribe failed", e);
-      await tg.sendMessage(chatId, "Не получилось распознать голосовое — попробуй ещё раз или напиши текстом.");
+      if (isPrivate) await tg.sendMessage(chatId, "Не получилось распознать голосовое — попробуй ещё раз или напиши текстом.");
       return;
     }
     if (!text) {
-      await tg.sendMessage(chatId, "Не расслышал — попробуй ещё раз.");
+      if (isPrivate) await tg.sendMessage(chatId, "Не расслышал — попробуй ещё раз.");
       return;
     }
+    voiceInGroup = !isPrivate;
     prefix = `🎙 <i>${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</i>\n\n`;
+    console.log("voice", isPrivate ? "private" : "group", `${text.length} chars`);
   }
   if (typeof text !== "string") return;
 
@@ -195,6 +203,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
     const replyToBot = !!r?.is_bot && (!me || (r.username || "").toLowerCase() === me);
     const byNick = stripNickname(text);
     if (!mentioned && !replyToBot && byNick === null) return;
+    if (voiceInGroup && byNick === null && !replyToBot) return;
     let q = me ? text.replace(new RegExp("@" + me, "ig"), " ").replace(/\s+/g, " ").trim() : text;
     if (byNick !== null && !mentioned) q = byNick;
     if (app.askFn) await tg.typing(chatId);
