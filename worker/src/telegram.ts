@@ -9,7 +9,7 @@ import type { FetchFn } from "./notion.ts";
 // [command, description, ephemeral in groups]
 export const COMMANDS: [string, string, boolean][] = [
   ["today", "Сводка: прогресс, просрочки, вехи", false],
-  ["my", "Мои задачи", true],
+  ["my", "Мой кабинет: мои задачи и напоминания", true],
   ["next", "Что делать дальше", true],
   ["free", "Свободные задачи", true],
   ["board", "Живая доска (в личке)", false],
@@ -22,8 +22,10 @@ export const COMMANDS: [string, string, boolean][] = [
   ["find", "Поиск", true],
   ["team", "Команда", true],
   ["memory", "Память команды", true],
+  ["settings", "Настройки уведомлений", true],
   ["window", "Одно окно в личке: вкл/выкл", true],
   ["sync", "Синхронизация с Notion", true],
+  ["pin", "Закрепить живую сводку в чате", true],
   ["help", "Что умеет бот", true],
 ];
 
@@ -108,6 +110,10 @@ export class TelegramApi {
     return this.call("editEphemeralMessageText", { ...base, text: s.text, parse_mode: "HTML" });
   }
 
+  pin(chatId: number, messageId: number) {
+    return this.call("pinChatMessage", { chat_id: chatId, message_id: messageId, disable_notification: true });
+  }
+
   deleteMessage(chatId: number, messageId: number) {
     return this.call("deleteMessage", { chat_id: chatId, message_id: messageId });
   }
@@ -155,6 +161,11 @@ export async function sendNotices(tg: TelegramApi, notices: Notice[]): Promise<v
   for (const n of notices) {
     try {
       if (n.chatId > 0 && tg.onPrivatePost) await tg.onPrivatePost(n.chatId);
+      if (n.photo) {
+        const p = await tg.call("sendPhoto", { chat_id: n.chatId, photo: n.photo, caption: n.text.slice(0, 1000), parse_mode: "HTML", reply_markup: keyboard(n.kb) });
+        if (p.ok) continue;
+        console.warn("photo failed", p.description);
+      }
       const r = n.rich ? await tg.sendScreen({ text: n.text, kb: n.kb, rich: n.rich }, { chatId: n.chatId }) : await tg.sendMessage(n.chatId, n.text, n.kb);
       if (!r.ok) console.warn("notice failed", n.chatId, r.description);   // user never opened the bot, blocked it…
     } catch (e) {
@@ -220,6 +231,7 @@ export async function handleUpdate(update: any, app: App, tg: TelegramApi, opts:
     }
     const res = await app.onCallback(who(cb.from), chatId, cb.data || "");
     await tg.answerCallback(cb.id, res.toast, !!res.alert);
+    if (res.publicEdit && msg && !msg.ephemeral_message_id) await tg.editScreen(res.publicEdit, chatId, msg.message_id);
     if (res.screen && msg) {
       if (msg.ephemeral_message_id) {
         // the button sits in an ephemeral message: edit it for this person

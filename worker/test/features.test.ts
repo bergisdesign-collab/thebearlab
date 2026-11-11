@@ -107,7 +107,7 @@ it("one window: answers edit the panel; a notice in between opens a fresh panel 
   assert.ok(w.tg.sent.some((x) => x.method === "sendMessage" && x.body.chat_id === ME.id));
   w.tg.sent = [];
   await w.text(ME, w.dm(ME), "/my");
-  assert.equal(w.tg.sent[0].method, "sendMessage");             // a new panel, not an edit of the old one
+  assert.match(w.tg.sent[0].method, /^send(Rich)?Message$/);   // a new panel, not an edit of the old one
   w.tg.sent = [];
   await w.text(ME, w.dm(ME), "/window");
   w.tg.sent = [];
@@ -193,4 +193,178 @@ it("group chat: ordinary messages are buffered briefly, conclusions are extracte
   assert.equal(await w.st().get("gbuf", String(GROUP)), null);
   assert.equal(llm.requests[0].model, "claude-haiku-5-5");
   assert.match(llm.requests[0].messages[0].content, /Аня: я до пятницы пришлю три образца/);
+});
+
+// ---------------------------------------------------------------- batch: cabinet, settings, reminders, check-in, plan…
+import * as jobs from "../src/jobs.ts";
+import { AiTimeout, Assistant } from "../src/ai.ts";
+import { problems } from "../src/alerts.ts";
+import { burndown, chartUrl } from "../src/burndown.ts";
+import { NOTION_TASKS_DB } from "../src/config.ts";
+import { at } from "./fakes.ts";
+
+const dmTo = (w: any, id: number) => w.tg.sent.filter((x: any) => x.body.chat_id === id);
+const said = (xs: any[]) => xs.map((x) => x.body.text ?? x.body.caption ?? x.body.rich_message?.markdown ?? "").join("\n---\n");
+
+it("cabinet: a task I take in the group, or that is assigned to me, lands in my private chat", async () => {
+  const w = await world();
+  await w.press(ME, w.grp, `t:take:${w.ids.t_fabric}`);
+  assert.match(said(dmTo(w, ME.id)), /В твоём кабинете новая задача[\s\S]*Найти поставщика ткани/);
+  w.tg.sent = [];
+  await w.press(ME, w.dm(ME), `t:to:${w.ids.t_after}:${ANYA.id}`);
+  assert.match(said(dmTo(w, ANYA.id)), /В твоём кабинете[\s\S]*Утвердить гейм-диздок[\s\S]*через 15 дн/);
+  w.tg.sent = [];
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_decide}`);   // taking it in my own chat: no extra card
+  assert.ok(!/В твоём кабинете/.test(said(dmTo(w, ME.id))));
+  await w.text(ME, w.dm(ME), "/my");
+  assert.match(w.tg.shown(), /Мой кабинет[\s\S]*Сегодня|Мой кабинет[\s\S]*На неделе|Мой кабинет[\s\S]*Позже/);
+});
+
+it("settings: each person switches their own notifications; jobs respect them", async () => {
+  const w = await world();
+  await w.text(ME, w.dm(ME), "/settings");
+  assert.match(w.tg.shown(), /Настройки уведомлений[\s\S]*Общий чат/);    // admin sees group switches too
+  await w.press(ANYA, w.dm(ANYA), "pf:morning");
+  const st = w.st();
+  const out = await jobs.run("morning", st, w.deps.clock);
+  assert.ok(!out.some((n) => n.chatId === ANYA.id));
+  assert.ok(out.some((n) => n.chatId === GROUP));
+  await w.press(ANYA, w.dm(ANYA), "gp:digest");                          // not an admin
+  await w.press(ME, w.dm(ME), "gp:digest");
+  const out2 = await jobs.run("morning", w.st(), w.deps.clock);
+  assert.ok(!out2.some((n) => n.chatId === GROUP));
+});
+
+it("deadline tomorrow: the evening reminder warns the assignee a day before", async () => {
+  const w = await world();
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  await w.press(ME, w.dm(ME), `t:dd:${w.ids.t_fabric}:-24`);              // move to 06.11 = tomorrow
+  const st = w.st();
+  const t = (await st.task(w.ids.t_fabric))!;
+  if (t.due !== "2026-11-06") { t.due = "2026-11-06"; await st.saveTask(t); }
+  const out = await jobs.run("evening", w.st(), at("2026-11-05T15:00:00Z"));
+  assert.match(out.find((n) => n.chatId === ME.id)!.text, /Завтра срок[\s\S]*Найти поставщика ткани/);
+});
+
+it("reminders: «напомни Ане…» through the AI, delivered by the tick at that time", async () => {
+  const llm = new FakeLlm([tool("set_reminder", { member: "Аня", when: "2026-11-05T10:00", text: "Про образцы ткани" }), say("Напомню Ане сегодня в 10:00.")]);
+  const w = await world(llm);
+  await w.text(ME, w.grp, "Бро, напомни Ане сегодня в 10 про образцы");
+  assert.match(said(dmTo(w, ANYA.id)), /поставил\(а\) тебе напоминание на 05\.11 в 10:00/);
+  w.tg.sent = [];
+  await runtime(w.env, { ...w.deps, clock: at("2026-11-05T06:30:00Z") }).tick();
+  assert.ok(!/Напоминание/.test(said(dmTo(w, ANYA.id))));
+  await runtime(w.env, { ...w.deps, clock: at("2026-11-05T07:01:00Z") }).tick();
+  assert.match(said(dmTo(w, ANYA.id)), /⏰ <b>Напоминание<\/b> от Сергей\nПро образцы ткани/);
+  w.tg.sent = [];
+  await runtime(w.env, { ...w.deps, clock: at("2026-11-05T07:11:00Z") }).tick();
+  assert.ok(!/Напоминание/.test(said(dmTo(w, ANYA.id))));                // only once
+});
+
+it("evening check-in: the answer goes into the task journal (no AI)", async () => {
+  const w = await world();
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  await w.press(ME, w.dm(ME), `t:st:${w.ids.t_fabric}:1`);
+  const out = await jobs.run("checkin", w.st(), at("2026-11-05T16:00:00Z"));
+  assert.match(out.find((n) => n.chatId === ME.id)!.text, /что сегодня продвинулось/);
+  // the await is stamped with the MSK date; answer the same day (world clock is 05.11)
+  w.tg.sent = [];
+  await w.text(ME, w.dm(ME), "Списался с двумя фабриками, жду образцы");
+  assert.match(w.tg.shown(), /Записал в журнал: «Найти поставщика ткани»/);
+  const evs = await w.st().events("", w.ids.t_fabric);
+  assert.ok(evs.some((e) => /Чек-ин: Списался/.test(e.text)));
+});
+
+it("Notion page text is shown in the task card and given to the AI", async () => {
+  const w = await world();
+  (w.fn as any).blocks = async () => [
+    { type: "heading_2", heading_2: { rich_text: [{ plain_text: "Требования" }] } },
+    { type: "bulleted_list_item", bulleted_list_item: { rich_text: [{ plain_text: "Плюш 300 г/м²" }] } },
+    { type: "to_do", to_do: { checked: true, rich_text: [{ plain_text: "Запросить сертификаты" }] } },
+  ];
+  await w.text(ME, w.dm(ME), "/find ткани");
+  await w.press(ME, w.dm(ME), `t:v:${w.ids.t_fabric}`);
+  assert.match(w.tg.shown(), /Из страницы Notion[\s\S]*Плюш 300/);
+  const cached = await w.st().get<any>("body", w.ids.t_fabric);
+  assert.match(cached.text, /☑ Запросить сертификаты/);
+});
+
+it("pinned live summary: pinned on /bindchat, edited when the picture changes, not when it doesn't", async () => {
+  const w = await world();
+  const st = w.st();
+  const pin = await st.kvGet<any>("pinned");
+  assert.equal(pin.chat, GROUP);
+  w.tg.sent = [];
+  await w.text(ME, w.dm(ME), "/today");
+  assert.ok(!w.tg.sent.some((x) => x.body.chat_id === GROUP && x.body.message_id === pin.id));
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  await w.press(ME, w.dm(ME), `t:st:${w.ids.t_fabric}:3`);                    // done → progress changes
+  assert.ok(w.tg.sent.some((x) => x.method === "editMessageText" && x.body.chat_id === GROUP && x.body.message_id === pin.id));
+});
+
+it("Monday plan: proposal in the group, «accept all» assigns and sets dates", async () => {
+  const w = await world();
+  const out = await jobs.run("monday", w.st(), at("2026-11-09T07:00:00Z"));
+  const n = out.find((x) => x.chatId === GROUP)!;
+  assert.match(n.text, /План недели/);
+  assert.ok(n.kb.flat().some((b: any) => b.data === "pl:all"));
+  w.tg.sent = [];
+  await w.press(ANYA, w.grp, "pl:all");
+  const plan = await w.st().kvGet<any>("week_plan");
+  assert.ok(plan.items.every((x: any) => x.state === "ok"));
+  const t = (await w.st().task(plan.items[0].t))!;
+  assert.equal(t.assignee_tg, plan.items[0].who);
+  assert.ok(w.tg.sent.some((x) => x.method === "editMessageText" && /План разобран/.test(x.body.text || "")));
+});
+
+it("Friday report carries a burndown chart", async () => {
+  const w = await world();
+  const out = await jobs.run("weekly", w.st(), at("2026-11-06T15:00:00Z"));
+  const photo = out.find((x) => x.photo)!;
+  assert.match(photo.photo!, /^https:\/\/quickchart\.io\/chart\?/);
+  assert.match(photo.text, /Осталось \d+ задач/);
+  const b = burndown({ "2026-11-01": { overdue: 0, done: 1, total: 10, by_member: {} } }, "2026-11-06", 8, 7);
+  assert.equal(b.actual.at(-1), 8);
+  assert.ok(chartUrl(b).length < 8000);
+});
+
+it("AI deadline: a slow chain ends with a partial answer instead of silence", async () => {
+  let n = 0;
+  const llm: LlmApi = { calls: 0, messages: async () => { n++; if (n === 1) return tool("find_tasks", { query: "ткань" }); throw new AiTimeout(); } };
+  const w = await world(llm);
+  await w.text(ME, w.dm(ME), "найди ткань и всё про неё");
+  assert.match(w.tg.shown(), /не успел договорить/);
+});
+
+it("dialogue history is kept separately for the private chat and the group", async () => {
+  const llm = new FakeLlm([say("Личный ответ"), say("Ответ в чате")]);
+  const w = await world(llm);
+  await w.text(ME, w.dm(ME), "вопрос в личке");
+  await w.text(ME, w.grp, "Бро, вопрос в чате");
+  const st = w.st();
+  assert.equal((await st.get<any>("chat", String(ME.id))).turns.length, 2);
+  assert.equal((await st.get<any>("chat", `${ME.id}:${GROUP}`)).turns.length, 2);
+  assert.equal(llm.requests[1].messages.length, 1);                        // the group question did not see the private one
+});
+
+it("self-check and alerts: only problems reach admins", async () => {
+  assert.deepEqual(problems({ lastSyncMs: NOW.getTime(), syncFails: 0, webhook: { url: "x" }, aiErrors: 0, jobErrors: 0 }, NOW.getTime(), true), []);
+  const p = problems({ lastSyncMs: NOW.getTime() - 5 * 3600_000, syncFails: 4, webhook: { url: "", pending_update_count: 50 }, aiErrors: 5, jobErrors: 1 }, NOW.getTime(), true);
+  assert.equal(p.length, 6);
+  const w = await world();
+  const out = await jobs.run("selfcheck", w.st(), w.deps.clock, { health: async () => ["Notion не синхронизировался 5 ч."] });
+  assert.deepEqual(out.map((x) => x.chatId), [ME.id]);
+  assert.deepEqual(await jobs.run("selfcheck", w.st(), w.deps.clock, { health: async () => [] }), []);
+});
+
+it("assigned in Notion → a card in the assignee's private chat", async () => {
+  const w = await world();
+  const st = w.st();
+  const anya = (await st.members()).find((m) => m.tg_id === ANYA.id)!;
+  if (!anya.notion_user_id) { anya.notion_user_id = "aaaaaaaa-0000-0000-0000-000000000002"; await st.put("member", String(ANYA.id), anya); }
+  w.fn.edit(w.ids.t_fabric, "Исполнитель", { type: "people", people: [{ id: "aaaaaaaa-0000-0000-0000-000000000002" }] });
+  w.tg.sent = [];
+  await w.post("/tick", {});
+  assert.match(said(dmTo(w, ANYA.id)), /Тебя назначили в Notion[\s\S]*Найти поставщика ткани/);
+  void NOTION_TASKS_DB;
 });

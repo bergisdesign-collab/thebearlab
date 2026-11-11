@@ -14,18 +14,22 @@ import type { Storage } from "./storage.ts";
 import { esc } from "./texts.ts";
 import { KINDS, forget, memories, remember } from "./memory.ts";
 import type { GroupLine } from "./memory.ts";
+import { addReminder, fmtAt } from "./reminders.ts";
+import type { PlanInput, PlanItem } from "./plan.ts";
 
 export const MODEL_FAST = "claude-haiku-5-5";
 export const MODEL_DEEP = "claude-opus-5-5";
 const MAX_STEPS = 6;
 const HISTORY = 16;          // dialogue turns kept per person
 const MAX_TASKS_IN_CONTEXT = 150;
+// Cloudflare stops background work ~30 s after the webhook answer: finish well before that.
+const ASK_DEADLINE_MS = 24_000;
 
 // ---------------------------------------------------------------- Anthropic API
 
 export interface LlmApi {
   calls: number;
-  messages(body: Record<string, unknown>): Promise<any>;
+  messages(body: Record<string, unknown>, opts?: { timeoutMs?: number }): Promise<any>;
 }
 
 export class AnthropicClient implements LlmApi {
@@ -38,15 +42,26 @@ export class AnthropicClient implements LlmApi {
     this.fetchFn = fetchFn;
   }
 
-  async messages(body: Record<string, unknown>): Promise<any> {
+  async messages(body: Record<string, unknown>, opts: { timeoutMs?: number } = {}): Promise<any> {
+    const until = opts.timeoutMs ? Date.now() + opts.timeoutMs : Infinity;
     for (let attempt = 0; attempt < 3; attempt++) {
+      const left = until - Date.now();
+      if (left < 2000) throw new AiTimeout();
       this.calls += 1;
-      const r = await this.fetchFn("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": this.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      let r: Response;
+      try {
+        r = await this.fetchFn("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": this.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: Number.isFinite(left) ? AbortSignal.timeout(left) : undefined,
+        });
+      } catch (e) {
+        if ((e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError") throw new AiTimeout();
+        throw e;
+      }
       if (r.status === 429 || r.status === 529 || r.status >= 500) {
+        if (until - Date.now() < 1500 * (attempt + 1) + 2000) throw new AiTimeout();
         await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
         continue;
       }
@@ -56,6 +71,10 @@ export class AnthropicClient implements LlmApi {
     }
     throw new Error("Anthropic: перегружен, попробуй ещё раз через минуту");
   }
+}
+
+export class AiTimeout extends Error {
+  constructor() { super("AI timeout"); this.name = "AiTimeout"; }
 }
 
 // ---------------------------------------------------------------- speech to text
@@ -126,6 +145,12 @@ export const TOOLS: Record<string, ReturnType<typeof S>> = {
   }, ["fact", "kind"]),
   forget: S("Удалить запись из памяти команды (если она устарела или ошибочна).", { id: str("код записи из памяти, в квадратных скобках") }, ["id"]),
   list_members: S("Участники команды и их загрузка."),
+  set_reminder: S("Поставить напоминание участнику (или себе): бот пришлёт его в личку в указанное время. «Напомни Ане в четверг в 10 про образцы».", {
+    member: str("Кому: me или имя участника"),
+    when: str("Когда, по Москве: YYYY-MM-DDTHH:MM. Если час не назван — 10:00."),
+    text: str("Текст напоминания, понятный без контекста"),
+    task: str("Задача, если напоминание про неё (необязательно)"),
+  }, ["member", "when", "text"]),
 };
 
 const SYSTEM = `Ты — ИИ-консультант команды TheBearLab в Telegram-боте «the Bear Lab Bot». TheBearLab — платформа, где дети и родители собирают плюшевого мишку в 3D-конструкторе и заказывают пошив. Команда маленькая (2–3 человека), цель — запуск продаж по роадмапу.
@@ -151,7 +176,10 @@ const SYSTEM = `Ты — ИИ-консультант команды TheBearLab �
 - Не выдумывай задачи, даты и людей — бери их из данных и инструментов.
 - Массовые изменения (больше 3 задач за раз) сначала опиши и спроси подтверждение.
 - После изменений кратко перечисли, что сделано. Уведомления команде и запись в Notion бот делает сам.
-- Даты в ответах пиши как 13.11; в инструментах — YYYY-MM-DD. Сегодня и часовой пояс (МСК) указаны в контексте.`;
+- Даты в ответах пиши как 13.11; в инструментах — YYYY-MM-DD. Сегодня и часовой пояс (МСК) указаны в контексте.
+- «Напомни …» — это set_reminder: посчитай дату по сегодняшнему дню («в четверг» — ближайший четверг).`;
+
+const CHECKIN = `Это ответ на вечерний чек-ин «Что сегодня продвинулось?». Разнеси сказанное по задачам автора: к каждой задаче, о которой идёт речь, добавь заметку add_note (коротко, своими словами, по делу); если сказано, что задача готова — set_status «На проверке» или «Выполнено»; если начата — «В работе»; если назван новый срок — set_due. Не создавай новых задач без явной просьбы. Если непонятно, к какой задаче относится фраза, — спроси. Ответь коротко: что куда записал. Строку «Темы:» не добавляй.`;
 
 // ---------------------------------------------------------------- formatting
 
@@ -190,6 +218,8 @@ export class Assistant {
   changed = new Set<string>();
   remembered: string[] = [];
   source = "Личка";      // where the conversation happens: «Личка» or «Общий чат»
+  pageText?: (t: Task) => Promise<string>;   // text inside the task's Notion page
+  deadlineMs = ASK_DEADLINE_MS;
 
   constructor(app: App, llm: LlmApi, clock: Clock) {
     this.app = app;
@@ -301,6 +331,7 @@ export class Assistant {
           blocks: logic.blockedTasks(t, all).map((x) => x.title),
           history: evs.slice(-10).map((e) => `${e.ts.slice(0, 16)} ${e.actor}: ${e.text}`),
           journal: evs.length ? undefined : t.log.slice(-800),
+          page_text: this.pageText ? (await this.pageText(t).catch(() => "")).slice(0, 4000) || undefined : undefined,
         };
       }
       case "roadmap_overview": {
@@ -401,6 +432,17 @@ export class Assistant {
       case "forget": {
         return { ok: await forget(this.st, String(input.id).replace(/[[\]]/g, "")) };
       }
+      case "set_reminder": {
+        const who = String(input.member || "me").toLowerCase() === "me" ? m : await this.resolveMember(m, String(input.member));
+        if (!who) throw new ActionError(`Не нашёл участника «${input.member}»`);
+        const task = input.task ? await this.resolveTask(input.task) : null;
+        let r;
+        try {
+          r = await addReminder(this.st, this.clock, { tg: who.tg_id, at: String(input.when).slice(0, 16), text: String(input.text), by: who.tg_id === m.tg_id ? "" : m.name, task: task?.id });
+        } catch (e) { throw new ActionError((e as Error).message); }
+        if (who.tg_id !== m.tg_id) this.notices.push({ chatId: who.tg_id, text: `🔔 ${esc(m.name)} поставил(а) тебе напоминание на ${fmtAt(r.at)}: ${esc(r.text)}`, kb: [] });
+        return { ok: true, to: who.name, at: fmtAt(r.at) };
+      }
       case "list_members": {
         const tasks = await this.st.tasks();
         return (await this.st.members()).filter((x) => x.approved).map((x) => ({
@@ -414,22 +456,33 @@ export class Assistant {
   }
 
   // --- dialogue -------------------------------------------------------------------
-  async ask(m: Member, text: string): Promise<Result> {
+  async ask(m: Member, text: string, opts: { chatId?: number; checkin?: boolean } = {}): Promise<Result> {
     this.notices = [];
     this.changed.clear();
     this.remembered = [];
-    const hist = ((await this.st.get<{ turns: Turn[] }>("chat", String(m.tg_id)))?.turns || []).slice(-HISTORY);
+    const started = Date.now();
+    // Private chat keeps the old key; every other chat has its own dialogue with this person.
+    const histKey = !opts.chatId || opts.chatId === m.tg_id ? String(m.tg_id) : `${m.tg_id}:${opts.chatId}`;
+    const hist = ((await this.st.get<{ turns: Turn[] }>("chat", histKey))?.turns || []).slice(-HISTORY);
     const messages: any[] = hist.map((t) => ({ role: t.role, content: t.content }));
     messages.push({ role: "user", content: text });
     const tools = Object.entries(TOOLS).map(([name, def]) => ({ name, ...def }));
     const system = [
       { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
-      { type: "text", text: await this.context(m) },
+      { type: "text", text: await this.context(m) + (opts.checkin ? "\n\n" + CHECKIN : "") },
     ];
     let answer = "";
     for (let step = 0; step < MAX_STEPS; step++) {
       const t0 = Date.now();
-      const resp = await this.llm.messages({ model: MODEL_FAST, max_tokens: 1500, system, tools, messages });
+      let resp: any;
+      try {
+        resp = await this.llm.messages({ model: MODEL_FAST, max_tokens: 1500, system, tools, messages }, { timeoutMs: this.deadlineMs - (Date.now() - started) });
+      } catch (e) {
+        if (!(e instanceof AiTimeout)) throw e;
+        console.warn("ai deadline at step", step);
+        answer = step === 0 ? "Не успел подумать — вопрос оказался тяжёлым. Спроси ещё раз, можно короче." : "Сделал часть, но не успел договорить. Проверь, что изменилось, и спроси ещё раз, если нужно продолжить.";
+        break;
+      }
       console.log("ai step", step, resp.stop_reason, `${Date.now() - t0}ms`, (resp.content || []).map((b: any) => b.type === "tool_use" ? `tool:${b.name}` : b.type).join(","));
       const content: any[] = resp.content || [];
       const texts = content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -451,7 +504,7 @@ export class Assistant {
     answer = answer || "Готово.";
     const { body, topics } = splitTopics(answer);
     const turns = [...hist, { role: "user" as const, content: text }, { role: "assistant" as const, content: answer }].slice(-HISTORY);
-    await this.st.put("chat", String(m.tg_id), { turns });
+    await this.st.put("chat", histKey, { turns });
     if (topics.length) await this.st.kvSet(`topics:${m.tg_id}`, topics);
     const kb: Btn[][] = topics.map((t, i) => [{ text: `💬 ${t}`.slice(0, 60), data: `ai:${i}` }]);
     for (const id of [...this.changed].slice(0, 5)) kb.push([{ text: "Открыть задачу", data: `t:v:${id}` }]);
@@ -481,6 +534,32 @@ export class Assistant {
       if ((await memories(this.st)).length > before) saved.push(`${mm.kind}: ${mm.text}`);
     }
     return saved;
+  }
+
+  /** Monday plan: who takes which candidate task this week and by when. Validated against real ids. */
+  async planWeek(inp: PlanInput, today: string): Promise<PlanItem[]> {
+    const names = new Map(inp.members.map((x) => [x.tg_id, x.name]));
+    const byName = new Map(inp.members.map((x) => [x.name.toLowerCase(), x.tg_id]));
+    const cand = inp.candidates.map((t) => ({ code: shortId(t.id), title: t.title, stage: t.stage, priority: t.priority, due: t.due, owner: t.assignee_tg ? names.get(t.assignee_tg) : null }));
+    const load = Object.fromEntries([...inp.load].map(([k, v]) => [names.get(k) || "?", v]));
+    const admin = inp.members.find((x) => x.admin) || inp.members[0];
+    const resp = await this.llm.messages({
+      model: MODEL_FAST, max_tokens: 900,
+      system: "Ты планируешь неделю маленькой команды TheBearLab. Распредели задачи-кандидаты между участниками с учётом текущей загрузки, приоритетов, сроков и вех; у каждого не больше 3 новых задач. Задачам с исполнителем предложи только срок. Сроки — в пределах ближайших 7–10 дней, не позже вех. Ответь строго JSON-массивом {\"code\", \"member\", \"due\": \"YYYY-MM-DD\", \"why\": \"до 8 слов\"}, не больше 8 пунктов.",
+      messages: [{ role: "user", content: `${admin ? await this.context(admin) : ""}\n\nСегодня ${today}. Загрузка (открытых задач): ${JSON.stringify(load)}\nКандидаты: ${JSON.stringify(cand)}` }],
+    }, { timeoutMs: 25_000 });
+    const raw = (resp.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    let items: any[] = [];
+    try { items = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1)); } catch { return []; }
+    const out: PlanItem[] = [];
+    for (const it of items.slice(0, 8)) {
+      const t = inp.candidates.find((x) => shortId(x.id) === String(it?.code));
+      const who = t?.assignee_tg || byName.get(String(it?.member || "").toLowerCase());
+      if (!t || !who || out.some((o) => o.t === t.id)) continue;
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(String(it.due)) && it.due >= today ? String(it.due) : t.due;
+      out.push({ t: t.id, who, due, why: String(it.why || "").slice(0, 80) });
+    }
+    return out;
   }
 
   /** Weekly deep review by Opus: where we are stuck, what to change. Plain text. */

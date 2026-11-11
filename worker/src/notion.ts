@@ -14,6 +14,7 @@ export interface NotionApi {
   update(pageId: string, props: Record<string, unknown>): Promise<any>;
   create(dbId: string, props: Record<string, unknown>): Promise<any>;
   archive(pageId: string): Promise<any>;
+  blocks?(blockId: string): Promise<any[]>;
 }
 
 export class NotionClient implements NotionApi {
@@ -65,6 +66,12 @@ export class NotionClient implements NotionApi {
       cursor = data.has_more ? data.next_cursor : undefined;
     } while (cursor);
     return out;
+  }
+
+  /** Child blocks of a page (first 100 are plenty for a task page). */
+  async blocks(blockId: string): Promise<any[]> {
+    const data = await this.req("GET", `/blocks/${blockId}/children?page_size=100`);
+    return data.results || [];
   }
 
   update(pageId: string, props: Record<string, unknown>): Promise<any> {
@@ -142,4 +149,39 @@ export function propTypes(pages: any[]): Record<string, string> {
   const types: Record<string, string> = {};
   for (const p of pages) for (const [name, prop] of Object.entries<any>(p.properties || {})) types[name] ??= prop.type;
   return types;
+}
+
+/** Notion blocks → plain text with simple Markdown-ish prefixes. */
+export function blocksToText(blocks: any[]): string {
+  const out: string[] = [];
+  let n = 0;
+  for (const b of blocks) {
+    const v = b?.[b?.type] || {};
+    const txt = (v.rich_text || []).map((r: any) => r.plain_text || "").join("").trim();
+    if (b.type !== "numbered_list_item") n = 0;
+    switch (b.type) {
+      case "heading_1": case "heading_2": case "heading_3": if (txt) out.push("", txt.toUpperCase()); break;
+      case "bulleted_list_item": if (txt) out.push("• " + txt); break;
+      case "numbered_list_item": if (txt) out.push(`${++n}. ${txt}`); break;
+      case "to_do": if (txt) out.push((v.checked ? "☑ " : "☐ ") + txt); break;
+      case "quote": case "callout": if (txt) out.push("» " + txt); break;
+      case "code": if (txt) out.push(txt); break;
+      case "bookmark": case "embed": case "link_preview": if (v.url) out.push(v.url); break;
+      case "child_page": out.push("[страница] " + (v.title || "")); break;
+      default: if (txt) out.push(txt);
+    }
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Text inside a task's Notion page, cached in D1 until the page is edited again. */
+export async function pageText(notion: NotionApi | null, st: { get<T>(k: string, id: string): Promise<T | null>; put(k: string, id: string, v: unknown): Promise<void> },
+  t: { id: string; notion_id: string | null; notion_edited: string }): Promise<string> {
+  if (!t.notion_id) return "";
+  const cached = await st.get<{ edited: string; text: string }>("body", t.id);
+  if (cached && cached.edited === t.notion_edited) return cached.text;
+  if (!notion?.blocks) return cached?.text || "";
+  const text = blocksToText(await notion.blocks(t.notion_id)).slice(0, 6000);
+  await st.put("body", t.id, { edited: t.notion_edited, text });
+  return text;
 }

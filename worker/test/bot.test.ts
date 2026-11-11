@@ -253,7 +253,7 @@ describe("ideas & team", () => {
     assert.ok(buttons(r.screen).every((b) => !b.text.includes("Integration")));
     await app.onCallback(ANYA, ANYA.id, `m:ln:${ANYA.id}:aaaaaaaa000000000000000000000002`);
     assert.equal((await st.task(ids.t_gdd))!.assignee_tg, ANYA.id);
-    assert.match((await app.onCommand(ANYA, ANYA.id, true, "my")).screen!.text, /Мои задачи \(1\)/);
+    assert.match((await app.onCommand(ANYA, ANYA.id, true, "my")).screen!.text, /Открытых задач: 1/);
   });
 });
 

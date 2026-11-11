@@ -2,7 +2,7 @@
 //   POST /tg       Telegram webhook (checked with X-Telegram-Bot-Api-Secret-Token)
 //   POST /setup    after each deploy: schema, webhook on this Worker's URL, bot menu (X-Cron-Secret)
 //   POST /tick     manual tick for debugging (X-Cron-Secret)
-//   cron */10      Notion sync + due jobs (09:00 / 18:00 / Fri 18:00 MSK)
+//   cron */10      Notion sync, personal reminders, pinned summary, due jobs (see jobs.ts)
 import { AnthropicClient, Assistant, transcribe, transcribeCloudflare } from "./ai.ts";
 import { bufferGroupMessage, groupBufferSize, takeGroupBuffer } from "./memory.ts";
 import { handleBoardQuery, sendBoard } from "./board.ts";
@@ -11,9 +11,14 @@ import { App } from "./app.ts";
 import { adminIds, realClock } from "./config.ts";
 import type { Clock, Env } from "./config.ts";
 import * as jobs from "./jobs.ts";
-import { NotionClient } from "./notion.ts";
+import { NotionClient, pageText } from "./notion.ts";
+import { adminAlert, countError, problems } from "./alerts.ts";
+import { refreshPinned } from "./pinned.ts";
+import { takeDueReminders } from "./reminders.ts";
+import { msk } from "./config.ts";
 import type { FetchFn, NotionApi } from "./notion.ts";
 import { Storage } from "./storage.ts";
+import { getPrefs } from "./prefs.ts";
 import { Syncer, shortReport } from "./sync.ts";
 import { TelegramApi, handleUpdate, sendNotices } from "./telegram.ts";
 import type { PanelStore } from "./telegram.ts";
@@ -36,20 +41,42 @@ export function runtime(env: Env, deps: Deps = {}) {
   const fullSync = async (forceUsers = false): Promise<string> => {
     if (!notion) return "Notion не подключён.";
     // A fresh storage object so a sync never works from a stale request cache.
-    const rep = await new Syncer(notion, new Storage(env.DB), clock, notion.calls + SYNC_BUDGET).run(forceUsers);
+    const s2 = new Storage(env.DB);
+    const rep = await new Syncer(notion, s2, clock, notion.calls + SYNC_BUDGET).run(forceUsers);
     for (const e of rep.errors) console.error("sync:", e);
+    for (const [tid, uid] of rep.assigned || []) {
+      const t = await s2.task(tid);
+      if (t && (await getPrefs(s2, uid)).cabinet) await sendNotices(tg, [await app.cabinetCard(t, uid, "Тебя назначили в Notion")]);
+    }
+    if (rep.errors.length) {
+      const fails = ((await s2.kvGet<number>("sync_fails")) || 0) + 1;
+      await s2.kvSet("sync_fails", fails);
+      if (fails >= 3) await sendNotices(tg, await adminAlert(s2, clock, "sync", `Синхронизация с Notion ${fails} раз подряд с ошибками: ${rep.errors.slice(0, 2).join("; ").slice(0, 300)}`));
+    } else {
+      await s2.kvSet("last_sync", clock().getTime());
+      await s2.kvSet("sync_fails", 0);
+    }
     return shortReport(rep);
   };
+  const today = () => msk(clock()).date;
+  const alert = async (key: string, text: string) => sendNotices(tg, await adminAlert(st, clock, key, text));
+  const bodyOf = (t: import("./models.ts").Task) => pageText(notion, st, t);
   const app = new App(st, clock, { adminIds: adminIds(env), syncFn: notion ? () => fullSync(true) : undefined });
+  if (notion) app.pageTextFn = bodyOf;
   const llm = deps.llm !== undefined ? deps.llm : env.ANTHROPIC_API_KEY ? new AnthropicClient(env.ANTHROPIC_API_KEY, deps.fetchFn) : null;
   if (llm) {
     app.askFn = async (m, text, o) => {
       try {
         const a = new Assistant(app, llm, clock);
         if (o?.group) a.source = "Общий чат";
-        return await a.ask(m, text);
+        if (notion) a.pageText = bodyOf;
+        return await a.ask(m, text, { chatId: o?.chatId, checkin: o?.checkin });
       } catch (e) {
         console.error("ai failed", e);
+        const n = await countError(st, "ai", today());
+        const msg = String((e as Error)?.message || e);
+        if (/credit|balance|billing|401|403|invalid x-api-key/i.test(msg)) await alert("ai_key", `ИИ-консультант не работает: ${msg.slice(0, 200)}. Проверь ключ и баланс Anthropic.`);
+        else if (n >= 3) await alert("ai_errors", `ИИ-консультант ошибся ${n} раз за сегодня. Последняя ошибка: ${msg.slice(0, 200)}`);
         return { screen: { text: "ИИ-консультант сейчас не ответил — попробуй через минуту. Пока можно воспользоваться меню или /find.", kb: [] }, notices: [] };
       }
     };
@@ -66,6 +93,21 @@ export function runtime(env: Env, deps: Deps = {}) {
     }
     : env.OPENAI_API_KEY ? (audio: ArrayBuffer) => transcribe(audio, env.OPENAI_API_KEY!, deps.fetchFn) : undefined;
   const weeklyReview = llm ? () => new Assistant(app, llm, clock).weeklyReview() : undefined;
+  const planWeek = llm ? (inp: import("./plan.ts").PlanInput, d: string) => new Assistant(app, llm, clock).planWeek(inp, d) : undefined;
+  const health = async (): Promise<string[]> => {
+    const wh = await tg.call("getWebhookInfo", {}).catch(() => null);
+    const y = msk(new Date(clock().getTime() - 86400000)).date;
+    const errs = async (k: string) => ((await st.kvGet<number>(`err:${k}:${today()}`)) || 0) + ((await st.kvGet<number>(`err:${k}:${y}`)) || 0);
+    return problems({
+      lastSyncMs: (await st.kvGet<number>("last_sync")) ?? null,
+      syncFails: (await st.kvGet<number>("sync_fails")) || 0,
+      webhook: wh?.ok ? (wh as any).result : undefined,
+      aiErrors: await errs("ai"), jobErrors: await errs("job"),
+    }, clock().getTime(), !!notion);
+  };
+  const pinned = async (): Promise<string> => {
+    try { return await refreshPinned(st, tg, clock); } catch (e) { console.error("pinned failed", e); return "error"; }
+  };
   // Ordinary messages of the bound group are kept briefly, only to extract conclusions (then deleted).
   const bufferGroup = llm ? async (chatId: number, who: string, text: string) => {
     if (Number(await st.kvGet("group_chat")) === chatId && (await st.members()).some((x) => x.approved)) {
@@ -98,20 +140,37 @@ export function runtime(env: Env, deps: Deps = {}) {
   };
   const tick = async (): Promise<Record<string, unknown>> => {
     const out: Record<string, unknown> = {};
-    try { out.sync = await fullSync(); } catch (e) { console.error("sync failed", e); out.sync_error = String(e).slice(0, 300); }
+    try { out.sync = await fullSync(); } catch (e) {
+      console.error("sync failed", e);
+      out.sync_error = String(e).slice(0, 300);
+      const fails = ((await st.kvGet<number>("sync_fails")) || 0) + 1;
+      await st.kvSet("sync_fails", fails);
+      if (fails >= 3) await alert("sync", `Синхронизация с Notion падает ${fails} раз подряд: ${String(e).slice(0, 200)}`);
+    }
     st.refresh();
+    try {
+      const due = await takeDueReminders(st, clock);
+      if (due.length) { await sendNotices(tg, due); out.reminders = due.length; }
+    } catch (e) { console.error("reminders failed", e); }
     const now = clock();
     for (const job of await jobs.due(st, now)) {
-      const notices = await jobs.run(job, st, clock, { weeklyReview });
-      await sendNotices(tg, notices);
+      try {
+        const notices = await jobs.run(job, st, clock, { weeklyReview, planWeek, health });
+        await sendNotices(tg, notices);
+        out[job] = notices.length;
+      } catch (e) {
+        console.error("job failed", job, e);
+        await countError(st, "job", today());
+        await alert("job_" + job, `Плановая рассылка «${job}» упала: ${String(e).slice(0, 200)}`);
+      }
       await jobs.markDone(st, job, now);
-      out[job] = notices.length;
     }
+    out.pinned = await pinned();
     try { out.remembered = await extractConclusions(); } catch (e) { console.error("extract failed", e); }
     return out;
   };
   const panel: PanelStore = {
-    enabled: async (uid) => ((await st.kvGet<Record<string, unknown>>(`prefs:${uid}`)) || {}).window !== false,
+    enabled: async (uid) => (await getPrefs(st, uid)).window,
     get: (chatId) => st.kvGet<number>(`panel:${chatId}`),
     set: (chatId, id) => st.kvSet(`panel:${chatId}`, id),
   };
@@ -122,7 +181,7 @@ export function runtime(env: Env, deps: Deps = {}) {
     if (!(await sendBoard(app, tg, chatId, m))) await tg.sendMessage(chatId, "Не получилось показать доску. Обнови Telegram до последней версии — виджеты появились совсем недавно.");
   };
   const widget = async (q: any): Promise<void> => { await sendNotices(tg, await handleBoardQuery(app, tg, q)); };
-  return { clock, st, notion, tg, app, push, tick, fullSync, voice, bufferGroup, panel, board, widget };
+  return { clock, st, notion, tg, app, push, tick, fullSync, voice, bufferGroup, panel, board, widget, pinned, health };
 }
 
 function secretOk(got: string | null, expected?: string): boolean {
@@ -156,6 +215,7 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
       } catch (e) {
         console.error("push to Notion failed", e);
       }
+      await rt.pinned();
     })());
     return new Response("ok");
   }

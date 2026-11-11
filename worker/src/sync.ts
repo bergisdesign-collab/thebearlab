@@ -9,7 +9,7 @@ import { NOTION_IDEAS_DB, NOTION_MEMORY_DB, NOTION_MILESTONES_DB, NOTION_TASKS_D
 import { KINDS, SOURCES, newMemory } from "./memory.ts";
 import type { Memory } from "./memory.ts";
 import type { Clock } from "./config.ts";
-import { newIdea, newMilestone, newTask } from "./models.ts";
+import { isDone, newIdea, newMilestone, newTask } from "./models.ts";
 import type { Idea, Milestone, Task } from "./models.ts";
 import { nid, propTypes, read, write } from "./notion.ts";
 import type { NotionApi } from "./notion.ts";
@@ -33,7 +33,7 @@ const USERS_EVERY_MS = 60 * 60 * 1000;   // Notion users rarely change: pull the
 
 type PropTypes = { task: Record<string, string>; ms: Record<string, string>; idea: Record<string, string> };
 
-export interface Report { pulled: Record<string, number>; created: number; pushed: number; archived: number; errors: string[]; deferred: number }
+export interface Report { pulled: Record<string, number>; created: number; pushed: number; archived: number; errors: string[]; deferred: number; assigned?: [string, number][] }
 
 export function shortReport(r: Report): string {
   let s = `Задач: ${r.pulled.tasks ?? 0}, вех: ${r.pulled.milestones ?? 0}, идей: ${r.pulled.ideas ?? 0}. Отправлено изменений: ${r.pushed}, новых страниц: ${r.created}.`;
@@ -172,6 +172,8 @@ export class Syncer {
       t.notion_edited = p.last_edited_time || "";
       t.archived = false;
       if (JSON.stringify(t) !== before) await this.st.saveTask(t);
+      // someone was put on the task in Notion → their cabinet gets a card
+      if (cur && t.assignee_tg && t.assignee_tg !== cur.assignee_tg && !isDone(t)) (this.r.assigned ||= []).push([t.id, t.assignee_tg]);
     }
     for (const t of local.values()) {
       if (t.notion_id && !remotes.has(t.notion_id) && !t.archived) {

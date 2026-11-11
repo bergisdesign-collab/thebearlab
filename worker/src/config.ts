@@ -41,6 +41,9 @@ export const JOBS: Record<string, { hour: number; minute: number; weekday: numbe
   morning: { hour: 9, minute: 0, weekday: null },
   evening: { hour: 18, minute: 0, weekday: null },
   weekly: { hour: 18, minute: 0, weekday: 4 },   // Friday (Mon = 0)
+  checkin: { hour: 19, minute: 0, weekday: null },
+  monday: { hour: 10, minute: 0, weekday: 0 },   // Monday plan
+  selfcheck: { hour: 12, minute: 0, weekday: null },
 };
 
 /** ADMIN_IDS: Telegram ids and/or @usernames, separated by ; , or spaces (e.g. "123456789;@anya"). */

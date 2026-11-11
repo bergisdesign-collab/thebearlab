@@ -173,12 +173,15 @@ export async function personal(st: Storage, m: Member, today: string, evening = 
   const mine = tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t));
   const od = logic.overdue(mine, today);
   const td = logic.dueOn(mine, today);
-  const work = mine.filter((t) => t.status === "В работе" && !od.includes(t) && !td.includes(t));
+  const tomorrow = logic.dueOn(mine, addDays(today, 1));
+  const soon = mine.filter((t) => t.due && t.due > addDays(today, 1) && t.due <= addDays(today, 3));
+  const work = mine.filter((t) => t.status === "В работе" && !od.includes(t) && !td.includes(t) && !tomorrow.includes(t));
   const lines: string[] = [];
   if (evening) {
-    if (!od.length && !td.length) return null;
+    if (!od.length && !td.length && !tomorrow.length) return null;
     lines.push(`<b>${esc(m.name)}, вечерняя сверка</b>`);
     if (td.length) lines.push("", "Срок сегодня — отметь результат или перенеси:", ...td.map((t) => taskLine(t, names, today, false)));
+    if (tomorrow.length) lines.push("", "<b>🔔 Завтра срок</b> — успеваешь? Если нет, перенеси заранее:", ...tomorrow.map((t) => taskLine(t, names, today, false)));
     if (od.length) lines.push("", "Просрочено:", ...od.map((t) => taskLine(t, names, today, false)));
     return lines.join("\n");
   }
@@ -187,7 +190,9 @@ export async function personal(st: Storage, m: Member, today: string, evening = 
   if (s) lines.push(`Твоя серия без просрочек: ${logic.daysStr(s)}`);
   if (od.length) lines.push("", "<b>⏰ Просрочено</b>", ...od.map((t) => taskLine(t, names, today, false)));
   if (td.length) lines.push("", "<b>📅 Сегодня</b>", ...td.map((t) => taskLine(t, names, today, false)));
-  if (work.length) lines.push("", "<b>🔵 В работе</b>", ...work.slice(0, 6).map((t) => taskLine(t, names, today, false)));
+  if (tomorrow.length) lines.push("", "<b>🔔 Завтра срок</b>", ...tomorrow.map((t) => taskLine(t, names, today, false)));
+  if (soon.length) lines.push("", "<b>🗓 Скоро срок</b>", ...soon.map((t) => taskLine(t, names, today, false)));
+  if (work.length) lines.push("", "<b>🔵 В работе</b>", ...work.filter((t) => !soon.includes(t)).slice(0, 6).map((t) => taskLine(t, names, today, false)));
   const sug = logic.suggest(tasks, await st.milestones(), m.tg_id, today, 1);
   if (sug.length) {
     lines.push("", `<b>Совет дня:</b> ${esc(sug[0].task.title)}`);
@@ -250,7 +255,8 @@ export function ideaCard(i: Idea): string {
 export const HELP = `<b>the Bear Lab Bot</b> — штурман по роадмапу запуска TheBearLab.
 
 /today — сводка: прогресс, просрочки, сроки, ближайшая веха
-/my — мои задачи
+/my — мой кабинет: мои задачи по срокам и мои напоминания
+/settings — какие уведомления присылать тебе
 /board — живая доска в личке: прогресс и твои задачи, отмечай ✓ прямо в ней
 /next — что делать дальше (с объяснением почему)
 /free — свободные задачи, которые можно взять
@@ -267,4 +273,8 @@ export const HELP = `<b>the Bear Lab Bot</b> — штурман по роадм�
 
 В карточке задачи: взять / снять с себя / назначить, статус, перенос срока, результат (ссылка), заметка в журнал, история.
 Все изменения видны команде и попадают в Notion (поле «Журнал»).
-В общем чате: /bindchat — сделать его чатом для сводок; чтобы спросить бота, начни сообщение с «Бро» («Бро, что горит?»), упомяни его или ответь на его сообщение.`;
+Когда задача попадает на тебя (взял сам — в чате, голосом или через ИИ — или тебе назначили), карточка приходит в личку; бот напоминает о сроке накануне вечером и утром в день срока.
+Напоминания: «Бро, напомни Ане в четверг в 10 про образцы».
+Каждый вечер в 19:00 — чек-ин «что сегодня продвинулось?»: ответь текстом или голосом, бот разнесёт по журналам задач.
+В понедельник — план недели с кнопками, в пятницу — итоги с графиком прогресса.
+В общем чате: /bindchat — сделать его чатом для сводок, /pin — закрепить живую сводку (нужны права админа); чтобы спросить бота, начни сообщение с «Бро» («Бро, что горит?»), упомяни его или ответь на его сообщение.`;

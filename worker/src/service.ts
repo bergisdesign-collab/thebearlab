@@ -191,6 +191,7 @@ export class Service {
     await this.st.recordDay(today, {
       overdue: logic.overdue(tasks, today).length,
       done: tasks.filter((t) => t.status === DONE).length,
+      total: tasks.length,
       by_member: logic.overdueByMember(tasks, today),
     });
   }

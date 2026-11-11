@@ -61,7 +61,7 @@ export function daysToLaunch(milestones: Milestone[], today: string): number {
 
 // --- streak -----------------------------------------------------------------
 
-export interface DayRec { overdue: number; done: number; by_member: Record<string, number> }
+export interface DayRec { overdue: number; done: number; by_member: Record<string, number>; total?: number }
 
 /** Consecutive recorded days without overdue tasks, ending today (or yesterday if today is not
  * recorded yet). Holidays are transparent: they neither count nor break the streak. */
