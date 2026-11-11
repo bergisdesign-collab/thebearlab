@@ -9,10 +9,12 @@ import { ActionError, Service } from "./service.ts";
 import type { Storage } from "./storage.ts";
 import * as texts from "./texts.ts";
 import { esc } from "./texts.ts";
+import { forget, memories } from "./memory.ts";
+import * as rich from "./rich.ts";
 
 export interface Btn { text: string; data?: string; url?: string }
-export interface Screen { text: string; kb: Btn[][] }
-export interface Notice { chatId: number; text: string; kb: Btn[][] }
+export interface Screen { text: string; kb: Btn[][]; rich?: string }   // rich: Markdown for a Telegram rich message
+export interface Notice { chatId: number; text: string; kb: Btn[][]; rich?: string }
 export interface Result { screen?: Screen; notices: Notice[]; toast?: string; alert?: boolean; newMessage?: boolean }
 export interface Who { id: number; name: string; username?: string }
 
@@ -28,9 +30,10 @@ export const MENU: Btn[][] = [
   [B("Сводка", "go:today"), B("Мои", "go:my"), B("Что дальше", "go:next")],
   [B("Свободные", "go:free"), B("Этапы", "go:tasks"), B("Роадмап", "go:plan")],
   [B("Идеи", "go:ideas"), B("Новая задача", "go:new"), B("Команда", "go:team")],
+  [B("📊 Живая доска", "go:board"), B("🧠 Память", "go:memory")],
 ];
 
-export type AskFn = (m: Member, text: string) => Promise<Result>;
+export type AskFn = (m: Member, text: string, opts?: { group?: boolean }) => Promise<Result>;
 export interface AppOptions { adminIds?: Set<string>; syncFn?: () => Promise<string>; askFn?: AskFn }
 
 export class App {
@@ -132,6 +135,16 @@ export class App {
         return this.askFn(m, args);
       case "cancel":
         return R(S("Ок, отменил.", MENU));
+      case "memory":
+        return R(await this.scrMemory(0));
+      case "window": {
+        const prefs = (await this.st.kvGet<Record<string, unknown>>(`prefs:${m.tg_id}`)) || {};
+        const on = prefs.window === false;
+        await this.st.kvSet(`prefs:${m.tg_id}`, { ...prefs, window: on });
+        return R(S(on
+          ? "Включил «одно окно»: в личке я обновляю одно сообщение, а твои вопросы убираю, чтобы чат был чистым. Выключить: /window"
+          : "Выключил «одно окно»: каждый ответ — новым сообщением, твои сообщения остаются. Включить: /window", MENU));
+      }
     }
     const screens: Record<string, (m: Member) => Promise<Screen>> = {
       menu: (x) => this.scrMenu(x), my: (x) => this.scrMy(x), next: (x) => this.scrNext(x), free: () => this.scrFree(),
@@ -160,7 +173,7 @@ export class App {
     const m = await this.member(who);
     if (!m) return R(S("Чтобы я отвечал тебе, напиши мне в личку /start — администратор примет заявку."));
     if (!text) return R(S("Я здесь. Спроси что-нибудь, например: «что горит на этой неделе?» — или открой меню.", MENU));
-    if (this.askFn) return this.askFn(m, text);
+    if (this.askFn) return this.askFn(m, text, { group: true });
     return R(await this.scrSearch(text));
   }
 
@@ -179,6 +192,13 @@ export class App {
         case "i": return await this.ideaCb(m, p);
         case "n": return await this.newCb(m, p);
         case "m": return await this.memberCb(m, p);
+        case "mem": {
+          if (p[1] === "del") {
+            await forget(this.st, p[2]);
+            return R(await this.scrMemory(Number(p[3] || 0)), { toast: "Удалено — и из Notion тоже" });
+          }
+          return R(await this.scrMemory(Number(p[2] || 0)));
+        }
         case "ai": {
           const topics = (await this.st.kvGet<string[]>(`topics:${m.tg_id}`)) || [];
           const topic = topics[Number(p[1])];
@@ -205,6 +225,8 @@ export class App {
       return R(S("Как назовём задачу? Напиши одной строкой.", [[B("Отмена", "n:cancel")]]));
     }
     const fns: Record<string, () => Promise<Screen>> = {
+      board: async () => S("Живая доска открывается в личке: отправь /board.", MENU),
+      memory: () => this.scrMemory(0),
       today: () => this.scrToday(), my: () => this.scrMy(m), next: () => this.scrNext(m), free: () => this.scrFree(),
       tasks: () => this.scrStages(), plan: () => this.scrPlan(), ms: () => this.scrMilestones(),
       ideas: () => this.scrIdeas(), team: () => this.scrTeam(m), help: () => this.scrHelp(), menu: () => this.scrMenu(m),
@@ -224,7 +246,8 @@ export class App {
   }
 
   async scrToday(): Promise<Screen> {
-    return S(await texts.teamDigest(this.st, this.today()), [[B("Мои задачи", "go:my"), B("Что дальше", "go:next")], [B("Меню", "go:menu")]]);
+    return { ...S(await texts.teamDigest(this.st, this.today()), [[B("Мои задачи", "go:my"), B("Что дальше", "go:next")], [B("Меню", "go:menu")]]),
+      rich: await rich.digest(this.st, this.today()) };
   }
 
   private taskButtons(tasks: Task[]): Btn[][] {
@@ -291,14 +314,16 @@ export class App {
   }
 
   async scrPlan(): Promise<Screen> {
-    return S(await texts.plan(this.st, this.today()), [[B("Вехи", "go:ms"), B("Этапы", "go:tasks")], [B("Меню", "go:menu")]]);
+    return { ...S(await texts.plan(this.st, this.today()), [[B("Вехи", "go:ms"), B("Этапы", "go:tasks")], [B("Меню", "go:menu")]]),
+      rich: await rich.plan(this.st, this.today()) };
   }
 
   async scrMilestones(): Promise<Screen> {
     const tasks = await this.st.tasks();
     const ms = await this.st.milestones();
     const lines = ["<b>Вехи</b>", "", ...ms.map((x) => texts.milestoneLine(x, tasks, this.today()))];
-    return S(lines.join("\n"), [...ms.map((x) => [B(texts.cut(x.title, 45), `ms:v:${x.id}`)]), [B("Меню", "go:menu")]]);
+    return { ...S(lines.join("\n"), [...ms.map((x) => [B(texts.cut(x.title, 45), `ms:v:${x.id}`)]), [B("Меню", "go:menu")]]),
+      rich: await rich.milestones(this.st, this.today()) };
   }
 
   async scrMilestone(mid: string): Promise<Screen> {
@@ -343,7 +368,7 @@ export class App {
     const idx = STAGES.includes(t.stage) ? STAGES.indexOf(t.stage) : STAGES.length;
     nav.push(B("← Этап", `s:${idx}`), B("Меню", "go:menu"));
     kb.push(nav);
-    return S(text, kb);
+    return { ...S(text, kb), rich: await rich.taskCard(t, this.st, this.today(), evs) };
   }
 
   /** Notices for the team about the events produced by the last action(s) on task t. */
@@ -493,6 +518,24 @@ export class App {
     const r = await this.after(m, t, null, "Задача создана");
     r.newMessage = true;
     return r;
+  }
+
+  // --- memory ------------------------------------------------------------------------
+  async scrMemory(page = 0): Promise<Screen> {
+    const all = (await memories(this.st)).reverse();
+    const per = 8;
+    const items = all.slice(page * per, page * per + per);
+    const icon: Record<string, string> = { "Решение": "✅", "Вывод": "💡", "Договорённость": "🤝", "Факт": "📌" };
+    const lines = ["<b>Память команды</b>", "Решения, выводы и договорённости из переписки. Они же — в Notion, база «Память команды».", ""];
+    if (!all.length) lines.push("Пока пусто. Скажи боту «запомни, что…» или просто обсуждайте — выводы он сохранит сам.");
+    items.forEach((x, i) => lines.push(`${page * per + i + 1}. ${icon[x.kind] || "📌"} ${esc(x.text)} <i>— ${esc(x.by || x.source)}, ${x.ts.slice(8, 10)}.${x.ts.slice(5, 7)}</i>`));
+    const kb: Btn[][] = items.map((x, i) => [B(`🗑 Удалить ${page * per + i + 1}`, `mem:del:${x.id}:${page}`)]);
+    const nav: Btn[] = [];
+    if (page > 0) nav.push(B("← Новее", `mem:p:${page - 1}`));
+    if ((page + 1) * per < all.length) nav.push(B("Старее →", `mem:p:${page + 1}`));
+    if (nav.length) kb.push(nav);
+    kb.push([B("Меню", "go:menu")]);
+    return S(lines.join("\n"), kb);
   }
 
   // --- ideas -------------------------------------------------------------------------

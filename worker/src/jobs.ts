@@ -11,6 +11,7 @@ import * as logic from "./logic.ts";
 import { Service } from "./service.ts";
 import type { Storage } from "./storage.ts";
 import * as texts from "./texts.ts";
+import * as rich from "./rich.ts";
 
 const MORNING_KB: Btn[][] = [[{ text: "Мои задачи", data: "go:my" }, { text: "Что дальше", data: "go:next" }]];
 
@@ -47,7 +48,9 @@ export async function run(job: string, st: Storage, clock: Clock, extras: JobExt
     if (group) {
       let text = await texts.teamDigest(st, today);
       if (changes.length) text += "\n\n<b>Изменились статусы вех:</b>\n" + changes.map(([t, o, n]) => `• ${texts.esc(t)}: ${o} → ${n}`).join("\n");
-      out.push({ chatId: Number(group), text, kb: [[{ text: "Свободные задачи", data: "go:free" }]] });
+      let r = await rich.digest(st, today);
+      if (changes.length) r += "\n\n#### Изменились статусы вех\n" + changes.map(([t, o, n]) => `- ${rich.md(t)}: ${o} → ${n}`).join("\n");
+      out.push({ chatId: Number(group), text, kb: [[{ text: "Свободные задачи", data: "go:free" }]], rich: r });
     }
     for (const m of members) {
       const msg = await texts.personal(st, m, today);
@@ -66,7 +69,7 @@ export async function run(job: string, st: Storage, clock: Clock, extras: JobExt
     }
   } else if (job === "weekly") {
     if (group) {
-      out.push({ chatId: Number(group), text: await texts.weekly(st, today), kb: [[{ text: "Роадмап", data: "go:plan" }]] });
+      out.push({ chatId: Number(group), text: await texts.weekly(st, today), kb: [[{ text: "Роадмап", data: "go:plan" }]], rich: await rich.weekly(st, today) });
       if (extras.weeklyReview) {
         try {
           const review = await extras.weeklyReview();

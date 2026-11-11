@@ -1,7 +1,7 @@
 // Test doubles: D1 on top of node:sqlite, a fake Notion API with real page shapes, a fake Telegram.
 import { DatabaseSync } from "node:sqlite";
 import type { D1Like, D1Stmt } from "../src/config.ts";
-import { NOTION_IDEAS_DB, NOTION_MILESTONES_DB, NOTION_TASKS_DB } from "../src/config.ts";
+import { NOTION_IDEAS_DB, NOTION_MEMORY_DB, NOTION_MILESTONES_DB, NOTION_TASKS_DB } from "../src/config.ts";
 import type { NotionApi } from "../src/notion.ts";
 import { Storage } from "../src/storage.ts";
 
@@ -60,7 +60,7 @@ export function P(ptype: string, value: any): any {
 export class FakeNotion implements NotionApi {
   calls = 0;
   log: [string, ...any[]][] = [];
-  dbs: Record<string, Map<string, any>> = { [NOTION_TASKS_DB]: new Map(), [NOTION_MILESTONES_DB]: new Map(), [NOTION_IDEAS_DB]: new Map() };
+  dbs: Record<string, Map<string, any>> = { [NOTION_TASKS_DB]: new Map(), [NOTION_MILESTONES_DB]: new Map(), [NOTION_IDEAS_DB]: new Map(), [NOTION_MEMORY_DB]: new Map() };
   usersList = [
     { id: "aaaaaaaa-0000-0000-0000-000000000001", name: "Сергей", type: "person" },
     { id: "aaaaaaaa-0000-0000-0000-000000000002", name: "Аня", type: "person" },
@@ -112,6 +112,13 @@ export class FakeNotion implements NotionApi {
     return pg;
   }
 
+  async archive(pageId: string): Promise<any> {
+    this.calls++;
+    this.log.push(["archive", pageId]);
+    for (const db of Object.values(this.dbs)) db.delete(pageId.replace(/-/g, ""));
+    return {};
+  }
+
   async create(dbId: string, props: Record<string, unknown>): Promise<any> {
     this.calls++;
     this.log.push(["create", dbId, props]);
@@ -161,4 +168,9 @@ export class FakeTelegram {
     return Response.json({ ok: true, result: { message_id: this.sent.length } });
   };
   methods(): string[] { return this.sent.map((s) => s.method); }
+  /** Text of the last message the person would see (plain text or rich Markdown). */
+  shown(): string {
+    const m = [...this.sent].reverse().find((x) => typeof x.body.text === "string" || x.body.rich_message);
+    return m ? (m.body.text ?? m.body.rich_message.markdown) : "";
+  }
 }

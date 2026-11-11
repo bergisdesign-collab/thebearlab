@@ -4,6 +4,8 @@
 //   POST /tick     manual tick for debugging (X-Cron-Secret)
 //   cron */10      Notion sync + due jobs (09:00 / 18:00 / Fri 18:00 MSK)
 import { AnthropicClient, Assistant, transcribe, transcribeCloudflare } from "./ai.ts";
+import { bufferGroupMessage, groupBufferSize, takeGroupBuffer } from "./memory.ts";
+import { handleBoardQuery, sendBoard } from "./board.ts";
 import type { LlmApi } from "./ai.ts";
 import { App } from "./app.ts";
 import { adminIds, realClock } from "./config.ts";
@@ -14,6 +16,7 @@ import type { FetchFn, NotionApi } from "./notion.ts";
 import { Storage } from "./storage.ts";
 import { Syncer, shortReport } from "./sync.ts";
 import { TelegramApi, handleUpdate, sendNotices } from "./telegram.ts";
+import type { PanelStore } from "./telegram.ts";
 
 export interface Ctx { waitUntil(p: Promise<unknown>): void }
 
@@ -29,6 +32,7 @@ export function runtime(env: Env, deps: Deps = {}) {
   const notion = deps.notion !== undefined ? deps.notion : env.NOTION_TOKEN ? new NotionClient(env.NOTION_TOKEN, deps.fetchFn) : null;
   const tg = new TelegramApi(env.BOT_TOKEN, deps.fetchFn);
   tg.botUsername = env.BOT_USERNAME;
+  tg.onPrivatePost = (chatId) => st.kvDel(`panel:${chatId}`);
   const fullSync = async (forceUsers = false): Promise<string> => {
     if (!notion) return "Notion не подключён.";
     // A fresh storage object so a sync never works from a stale request cache.
@@ -39,9 +43,11 @@ export function runtime(env: Env, deps: Deps = {}) {
   const app = new App(st, clock, { adminIds: adminIds(env), syncFn: notion ? () => fullSync(true) : undefined });
   const llm = deps.llm !== undefined ? deps.llm : env.ANTHROPIC_API_KEY ? new AnthropicClient(env.ANTHROPIC_API_KEY, deps.fetchFn) : null;
   if (llm) {
-    app.askFn = async (m, text) => {
+    app.askFn = async (m, text, o) => {
       try {
-        return await new Assistant(app, llm, clock).ask(m, text);
+        const a = new Assistant(app, llm, clock);
+        if (o?.group) a.source = "Общий чат";
+        return await a.ask(m, text);
       } catch (e) {
         console.error("ai failed", e);
         return { screen: { text: "ИИ-консультант сейчас не ответил — попробуй через минуту. Пока можно воспользоваться меню или /find.", kb: [] }, notices: [] };
@@ -60,6 +66,28 @@ export function runtime(env: Env, deps: Deps = {}) {
     }
     : env.OPENAI_API_KEY ? (audio: ArrayBuffer) => transcribe(audio, env.OPENAI_API_KEY!, deps.fetchFn) : undefined;
   const weeklyReview = llm ? () => new Assistant(app, llm, clock).weeklyReview() : undefined;
+  // Ordinary messages of the bound group are kept briefly, only to extract conclusions (then deleted).
+  const bufferGroup = llm ? async (chatId: number, who: string, text: string) => {
+    if (Number(await st.kvGet("group_chat")) === chatId && (await st.members()).some((x) => x.approved)) {
+      await bufferGroupMessage(st, clock, chatId, who, text);
+    }
+  } : undefined;
+  const extractConclusions = async (): Promise<number> => {
+    const group = Number(await st.kvGet("group_chat"));
+    if (!llm || !group) return 0;
+    const size = await groupBufferSize(st, group);
+    const last = (await st.kvGet<number>("extract_at")) || 0;
+    const age = clock().getTime() - last;
+    if (size > 0 && size < 3 && age > 24 * 3600 * 1000) { await takeGroupBuffer(st, group); await st.kvSet("extract_at", clock().getTime()); return 0; }   // nothing worth it: just forget
+    if (size < 3 || (size < 20 && age < 2 * 3600 * 1000)) return 0;
+    await st.kvSet("extract_at", clock().getTime());
+    const saved = await new Assistant(app, llm, clock).extractFromGroup(await takeGroupBuffer(st, group));
+    if (saved.length) {
+      await sendNotices(tg, [{ chatId: group, text: "📝 <b>Запомнил из обсуждения</b>\n" + saved.map((x) => "• " + x.replace(/&/g, "&amp;").replace(/</g, "&lt;")).join("\n"),
+        kb: [[{ text: "🧠 Вся память", data: "go:memory" }]] }]);
+    }
+    return saved.length;
+  };
   const push = async (): Promise<void> => {
     if (!notion) return;
     const s = new Syncer(notion, new Storage(env.DB), clock, notion.calls + PUSH_BUDGET);
@@ -79,9 +107,22 @@ export function runtime(env: Env, deps: Deps = {}) {
       await jobs.markDone(st, job, now);
       out[job] = notices.length;
     }
+    try { out.remembered = await extractConclusions(); } catch (e) { console.error("extract failed", e); }
     return out;
   };
-  return { clock, st, notion, tg, app, push, tick, fullSync, voice };
+  const panel: PanelStore = {
+    enabled: async (uid) => ((await st.kvGet<Record<string, unknown>>(`prefs:${uid}`)) || {}).window !== false,
+    get: (chatId) => st.kvGet<number>(`panel:${chatId}`),
+    set: (chatId, id) => st.kvSet(`panel:${chatId}`, id),
+  };
+  const board = async (chatId: number, from: { id: number; name: string; username?: string }, isPrivate: boolean): Promise<void> => {
+    const m = await app.memberOf(from);
+    if (!m) { await tg.sendMessage(chatId, "Сначала отправь мне /start в личных сообщениях."); return; }
+    if (!isPrivate) { await tg.sendMessage(chatId, "Живая доска работает в личке со мной — открой меня и нажми /board."); return; }
+    if (!(await sendBoard(app, tg, chatId, m))) await tg.sendMessage(chatId, "Не получилось показать доску. Обнови Telegram до последней версии — виджеты появились совсем недавно.");
+  };
+  const widget = async (q: any): Promise<void> => { await sendNotices(tg, await handleBoardQuery(app, tg, q)); };
+  return { clock, st, notion, tg, app, push, tick, fullSync, voice, bufferGroup, panel, board, widget };
 }
 
 function secretOk(got: string | null, expected?: string): boolean {
@@ -106,7 +147,7 @@ export async function handleFetch(req: Request, env: Env, ctx: Ctx, deps: Deps =
     ctx.waitUntil((async () => {
       try {
         rt.tg.botUsername ||= (await rt.st.kvGet<string>("bot_username")) || undefined;
-        await handleUpdate(update, rt.app, rt.tg, { transcribe: rt.voice });
+        await handleUpdate(update, rt.app, rt.tg, { transcribe: rt.voice, bufferGroup: rt.bufferGroup, panel: rt.panel, board: rt.board, widget: rt.widget });
       } catch (e) {
         console.error("update failed", e);
       }

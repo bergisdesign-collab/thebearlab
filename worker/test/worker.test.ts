@@ -53,7 +53,8 @@ it("webhook, tick and setup", async () => {
   assert.ok(tg.sent[0].body.reply_markup.inline_keyboard.length);
 
   await call("/tg", msg(3, "/today"), H);
-  assert.match(tg.sent[tg.sent.length - 1].body.text, /Сводка/);
+  assert.match(tg.shown(), /Сводка/);
+  assert.equal(tg.sent.at(-1)!.method, "deleteMessage");          // one window: the command is tidied away
 
   tg.sent = [];
   await call("/tg", cb(4, `t:take:${ids.t_fabric}`), H);
@@ -66,7 +67,8 @@ it("webhook, tick and setup", async () => {
 
   tg.sent = [];
   await call("/tg", msg(5, "ткань"), H);
-  assert.match(tg.sent[0].body.text, /Нашёл/);
+  assert.match(tg.shown(), /Нашёл/);
+  assert.match(tg.shown(), /❓ <i>ткань<\/i>/);                     // the question stays visible in the panel
 
   // the cron handler path
   const rt = runtime(env, { ...deps, clock: () => new Date("2026-11-05T15:01:00Z") });

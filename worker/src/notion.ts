@@ -13,6 +13,7 @@ export interface NotionApi {
   users(): Promise<any[]>;
   update(pageId: string, props: Record<string, unknown>): Promise<any>;
   create(dbId: string, props: Record<string, unknown>): Promise<any>;
+  archive(pageId: string): Promise<any>;
 }
 
 export class NotionClient implements NotionApi {
@@ -72,6 +73,10 @@ export class NotionClient implements NotionApi {
 
   create(dbId: string, props: Record<string, unknown>): Promise<any> {
     return this.req("POST", "/pages", { parent: { database_id: dbId }, properties: props });
+  }
+
+  archive(pageId: string): Promise<any> {
+    return this.req("PATCH", `/pages/${pageId}`, { archived: true });
   }
 }
 

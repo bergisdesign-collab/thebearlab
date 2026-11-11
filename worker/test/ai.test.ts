@@ -179,9 +179,9 @@ it("voice message → OpenAI transcription → AI answer, end to end through the
   await post("/tg", { update_id: 1, message: { message_id: 1, date: 0, chat: { id: 1, type: "private" }, from, text: "/start" } }, { "X-Telegram-Bot-Api-Secret-Token": "s" });
   tg.sent = [];
   await post("/tg", { update_id: 2, message: { message_id: 2, date: 0, chat: { id: 1, type: "private" }, from, voice: { file_id: "F1", duration: 3 } } }, { "X-Telegram-Bot-Api-Secret-Token": "s" });
-  assert.deepEqual(tg.methods(), ["sendChatAction", "getFile", "sendMessage"]);
-  const reply = tg.sent.at(-1)!.body.text;
-  assert.match(reply, /🎙 <i>что у нас сегодня по срокам<\/i>/);
+  assert.deepEqual(tg.methods(), ["sendChatAction", "getFile", "editMessageText", "deleteMessage"]);
+  const reply = tg.shown();                                            // a rich message: Markdown
+  assert.match(reply, /🎙 _что у нас сегодня по срокам_/);
   assert.match(reply, /Сегодня срок/);
   assert.equal(llm.requests[0].messages.at(-1).content, "что у нас сегодня по срокам");
 });
@@ -211,7 +211,7 @@ it("voice uses Cloudflare Workers AI by default (no OpenAI key needed)", async (
   await post("/tg", { update_id: 2, message: { message_id: 2, date: 0, chat: { id: 1, type: "private" }, from, voice: { file_id: "F" } } }, { "X-Telegram-Bot-Api-Secret-Token": "s" });
   assert.equal(seen[0][0], "@cf/openai/whisper-large-v3-turbo");
   assert.equal(seen[0][1].audio, btoa("hi"));
-  assert.match(tg.sent.at(-1)!.body.text, /🎙 <i>покажи мои задачи<\/i>/);   // without AI key: transcribed, then searched
+  assert.match(tg.shown(), /🎙 <i>покажи мои задачи<\/i>/);   // without AI key: transcribed, then searched
 });
 
 it("answers become plain Telegram HTML; «Темы:» turn into buttons that continue the dialogue", async () => {

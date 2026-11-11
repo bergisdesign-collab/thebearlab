@@ -5,7 +5,9 @@
 //   * Tasks created in the bot ("local-…") become Notion pages; Notion page id goes to notion_id.
 //   * Pages deleted in Notion are archived in the bot.
 //   * Nothing is written unless it changed. Push respects a subrequest budget (Cloudflare limit).
-import { NOTION_IDEAS_DB, NOTION_MILESTONES_DB, NOTION_TASKS_DB, msk } from "./config.ts";
+import { NOTION_IDEAS_DB, NOTION_MEMORY_DB, NOTION_MILESTONES_DB, NOTION_TASKS_DB, msk } from "./config.ts";
+import { KINDS, SOURCES, newMemory } from "./memory.ts";
+import type { Memory } from "./memory.ts";
 import type { Clock } from "./config.ts";
 import { newIdea, newMilestone, newTask } from "./models.ts";
 import type { Idea, Milestone, Task } from "./models.ts";
@@ -303,8 +305,71 @@ export class Syncer {
     }
   }
 
+  // ------------------------------------------------------------------- memory ↔ «Память команды»
+  async pullMemory(): Promise<void> {
+    let pages: any[];
+    try { pages = await this.n.query(NOTION_MEMORY_DB); } catch (e) { this.r.errors.push(`memory pull: ${e}`); return; }
+    this.st.refresh("memory");
+    const local = (await this.st.all<Memory>("memory")).map((m) => newMemory(m));
+    const byNotion = new Map(local.filter((m) => m.notion_id).map((m) => [m.notion_id!, m]));
+    const byId = new Map(local.map((m) => [m.id, m]));
+    const tombs = new Set((await this.st.all<{ notion_id: string }>("memory_tomb")).map((t) => t.notion_id));
+    const seen = new Set<string>();
+    for (const p of pages) {
+      const pid = nid(p.id);
+      if (tombs.has(pid)) continue;
+      seen.add(pid);
+      const pr = p.properties;
+      const text = read(pr["Запись"]) || "";
+      const kind = read(pr["Вид"]) || "Факт";
+      const code = read(pr["Код"]) || "";
+      let m = byNotion.get(pid) || (code ? byId.get(code) : undefined);
+      if (!m) {
+        if (!text) continue;
+        m = newMemory({ id: code || pid.slice(0, 8), text, kind: KINDS.includes(kind) ? kind : "Факт",
+          source: SOURCES.includes(read(pr["Источник"])) ? read(pr["Источник"]) : "Notion",
+          by: read(pr["Кто"]) || "", ts: (read(pr["Дата"]) || [""])[0] || p.created_time || "", notion_id: pid });
+        await this.st.put("memory", m.id, m);
+        continue;
+      }
+      const before = JSON.stringify(m);
+      m.notion_id = pid;
+      if (!m.dirty) { m.text = text || m.text; m.kind = KINDS.includes(kind) ? kind : m.kind; }
+      if (JSON.stringify(m) !== before) await this.st.put("memory", m.id, m);
+    }
+    for (const m of local) {   // deleted in Notion → forget here too
+      if (m.notion_id && !seen.has(m.notion_id) && !tombs.has(m.notion_id)) await this.st.delete("memory", m.id);
+    }
+    this.r.pulled.memory = pages.length;
+  }
+
+  async pushMemory(): Promise<void> {
+    for (const t of await this.st.all<{ notion_id: string }>("memory_tomb")) {
+      if (!this.canCall()) { this.r.deferred += 1; continue; }
+      try { await this.n.archive(t.notion_id); } catch (e) { this.r.errors.push(`memory archive: ${e}`); continue; }
+      await this.st.delete("memory_tomb", t.notion_id);
+    }
+    for (const m of (await this.st.all<Memory>("memory")).map((x) => newMemory(x))) {
+      if (m.notion_id && !m.dirty) continue;
+      if (!this.canCall()) { this.r.deferred += 1; continue; }
+      const props = {
+        "Запись": write("title", m.text), "Вид": write("select", m.kind), "Источник": write("select", m.source),
+        "Кто": write("rich_text", m.by), "Дата": write("date", [m.ts ? m.ts.slice(0, 10) : null, null]), "Код": write("rich_text", m.id),
+      };
+      try {
+        if (m.notion_id) await this.n.update(m.notion_id, props);
+        else m.notion_id = nid((await this.n.create(NOTION_MEMORY_DB, props)).id);
+      } catch (e) { this.r.errors.push(`memory push: ${e}`); continue; }
+      const fresh = (await this.st.get<Memory>("memory", m.id)) || m;
+      await this.st.put("memory", m.id, { ...fresh, notion_id: m.notion_id, dirty: fresh.text !== m.text || fresh.kind !== m.kind });
+      this.r.pushed += 1;
+    }
+  }
+
   // ------------------------------------------------------------------- run
   async hasLocalChanges(): Promise<boolean> {
+    if ((await this.st.all<Memory>("memory")).some((m) => m.dirty || !m.notion_id)) return true;
+    if ((await this.st.all("memory_tomb")).length) return true;
     return (await this.st.tasks(true)).some((t) => t.dirty.length > 0)
       || (await this.st.milestones()).some((m) => m.dirty.length > 0)
       || (await this.st.ideas()).some((i) => i.dirty.length > 0);
@@ -317,6 +382,7 @@ export class Syncer {
     await this.pushTasks();
     await this.pushIdeas();
     await this.pushMilestones();
+    await this.pushMemory();
     return this.r;
   }
 
@@ -326,11 +392,13 @@ export class Syncer {
     await this.pullMilestones();
     await this.pullTasks();
     await this.pullIdeas();
+    await this.pullMemory();
     if (!same(await this.st.kvGet("notion_types"), this.types)) await this.st.kvSet("notion_types", this.types);
     await new Service(this.st, this.clock).refreshMilestones();
     await this.pushTasks();
     await this.pushIdeas();
     await this.pushMilestones();
+    await this.pushMemory();
     await this.st.kvSet("last_sync", msk(this.clock()).iso);
     return this.r;
   }

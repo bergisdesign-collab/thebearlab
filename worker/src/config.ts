@@ -34,6 +34,7 @@ export const HOLIDAY_END = "2027-01-11";
 export const NOTION_TASKS_DB = "68024e36533543438e3ba32e71a2b314";
 export const NOTION_MILESTONES_DB = "505ce45d15a446ab9fe86649958dd598";
 export const NOTION_IDEAS_DB = "ad2d8120e9404cc099eb400aeeaef8d2";
+export const NOTION_MEMORY_DB = "c4aa5c698c3a40c6aef494856a6d20f3";
 
 // Scheduled jobs, Moscow time. A job fires on the first tick in [time, time + 2h).
 export const JOBS: Record<string, { hour: number; minute: number; weekday: number | null }> = {

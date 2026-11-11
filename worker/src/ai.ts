@@ -12,6 +12,8 @@ import type { FetchFn } from "./notion.ts";
 import { ActionError } from "./service.ts";
 import type { Storage } from "./storage.ts";
 import { esc } from "./texts.ts";
+import { KINDS, forget, memories, remember } from "./memory.ts";
+import type { GroupLine } from "./memory.ts";
 
 export const MODEL_FAST = "claude-haiku-5-5";
 export const MODEL_DEEP = "claude-opus-5-5";
@@ -118,8 +120,11 @@ export const TOOLS: Record<string, ReturnType<typeof S>> = {
   }, ["title", "stage"]),
   promote_idea: S("Превратить идею из бэклога в задачу.", { idea: str("Название идеи"), stage: str("Этап", { enum: STAGES }) }, ["idea", "stage"]),
   list_ideas: S("Идеи из бэклога.", { queue: str("MVP | v2 | Позже"), query: str("Слова для поиска") }),
-  remember: S("Сохранить в память команды важный факт: решение, договорённость, предпочтение. Используй, когда в разговоре звучит решение.", { fact: str("Факт одной фразой") }, ["fact"]),
-  forget: S("Удалить факт из памяти команды.", { id: str("id факта из памяти") }, ["id"]),
+  remember: S("Сохранить в память команды вывод из разговора: решение, договорённость, вывод или важный факт. Вызывай сам, без вопроса, когда такое прозвучало или вы к этому пришли.", {
+    fact: str("Суть одной законченной фразой, понятной без контекста (кто/что/когда)"),
+    kind: str("Вид записи", { enum: KINDS }),
+  }, ["fact", "kind"]),
+  forget: S("Удалить запись из памяти команды (если она устарела или ошибочна).", { id: str("код записи из памяти, в квадратных скобках") }, ["id"]),
   list_members: S("Участники команды и их загрузка."),
 };
 
@@ -134,10 +139,11 @@ const SYSTEM = `Ты — ИИ-консультант команды TheBearLab �
 Как отвечать:
 - Начинай с короткой живой сводки по сути вопроса — 1–3 фразы, как коллега в рабочем чате: что главное, без перечня задач.
 - Подробные списки задач, дат и людей давай, только когда об этом прямо просят или без них ответ теряет смысл.
+- Когда в разговоре появляется решение, вывод или договорённость — сохрани их инструментом remember (одна запись на мысль, без мелочей и без повторов того, что уже есть в памяти).
 - В конце ответа отдельной строкой предложи 2–4 темы, в которые можно углубиться дальше, строго в формате:
   Темы: тема один | тема два | тема три
   Каждая тема — 2–5 слов, это будут кнопки. Если вопрос был просьбой что-то сделать и она выполнена, темы можно не давать.
-- Пиши обычным текстом без Markdown: никаких звёздочек, решёток и подчёркиваний. Если нужен список — каждый пункт с новой строки, начиная с «•».
+- Оформление — Markdown для Telegram: **жирный** для главного, короткие списки «- », заголовок «### » только для длинных ответов, таблица — когда сравниваешь задачи или сроки. Без лишнего оформления в коротких ответах.
 
 Правила:
 - Отвечай по-русски, по делу, без воды и без эмодзи-салюта.
@@ -182,6 +188,8 @@ export class Assistant {
   clock: Clock;
   notices: Notice[] = [];
   changed = new Set<string>();
+  remembered: string[] = [];
+  source = "Личка";      // where the conversation happens: «Личка» or «Общий чат»
 
   constructor(app: App, llm: LlmApi, clock: Clock) {
     this.app = app;
@@ -215,10 +223,10 @@ export class Assistant {
     lines.push("", "Открытые задачи (код | название | этап | статус | срок | приоритет | исполнитель):");
     const open = tasks.filter((t) => !isDone(t)).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999")).slice(0, MAX_TASKS_IN_CONTEXT);
     for (const t of open) lines.push(`- ${shortId(t.id)} | ${t.title} | ${t.stage} | ${t.status} | ${t.due || "—"} | ${t.priority} | ${who(t)}`);
-    const mem = await this.st.all<{ id: string; text: string; by: string; ts: string }>("memory");
+    const mem = await memories(this.st);
     if (mem.length) {
-      lines.push("", "Память команды (решения и договорённости):");
-      for (const f of mem.sort((a, b) => a.ts.localeCompare(b.ts)).slice(-60)) lines.push(`- [${f.id}] ${f.ts.slice(0, 10)} ${f.by}: ${f.text}`);
+      lines.push("", "Память команды (код | дата | вид | кто | запись) — учитывай её в ответах:");
+      for (const f of mem.slice(-80)) lines.push(`- [${f.id}] ${f.ts.slice(0, 10)} | ${f.kind} | ${f.by || f.source} | ${f.text}`);
     }
     return lines.join("\n");
   }
@@ -386,13 +394,12 @@ export class Assistant {
         return ideas.slice(0, 40).map((i) => ({ title: i.title, group: i.group, queue: i.queue, status: i.status, closes: i.closes.slice(0, 200) }));
       }
       case "remember": {
-        const id = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
-        await this.st.put("memory", id, { id, text: String(input.fact).slice(0, 500), by: m.name, ts: msk(this.clock()).iso });
-        return { ok: true, id };
+        const saved = await remember(this.st, this.clock, String(input.fact), String(input.kind || "Факт"), this.source, m.name);
+        this.remembered.push(saved.text);
+        return { ok: true, id: saved.id };
       }
       case "forget": {
-        await this.st.delete("memory", String(input.id));
-        return { ok: true };
+        return { ok: await forget(this.st, String(input.id).replace(/[[\]]/g, "")) };
       }
       case "list_members": {
         const tasks = await this.st.tasks();
@@ -410,6 +417,7 @@ export class Assistant {
   async ask(m: Member, text: string): Promise<Result> {
     this.notices = [];
     this.changed.clear();
+    this.remembered = [];
     const hist = ((await this.st.get<{ turns: Turn[] }>("chat", String(m.tg_id)))?.turns || []).slice(-HISTORY);
     const messages: any[] = hist.map((t) => ({ role: t.role, content: t.content }));
     messages.push({ role: "user", content: text });
@@ -448,7 +456,31 @@ export class Assistant {
     const kb: Btn[][] = topics.map((t, i) => [{ text: `💬 ${t}`.slice(0, 60), data: `ai:${i}` }]);
     for (const id of [...this.changed].slice(0, 5)) kb.push([{ text: "Открыть задачу", data: `t:v:${id}` }]);
     kb.push([{ text: "Меню", data: "go:menu" }]);
-    return { screen: { text: mdToHtml(body) || "Готово.", kb }, notices: this.notices };
+    const memo = this.remembered.length ? `\n\n📝 Запомнил: ${this.remembered.join("; ")}` : "";
+    return { screen: { text: (mdToHtml(body) || "Готово.") + esc(memo), kb, rich: body + memo }, notices: this.notices };
+  }
+
+  /** Pull decisions/conclusions out of a stretch of the group chat and save them to team memory. */
+  async extractFromGroup(lines: GroupLine[]): Promise<string[]> {
+    if (lines.length < 3) return [];
+    const admin = (await this.st.members()).find((x) => x.admin) || { tg_id: 0, name: "команда", username: "", notion_user_id: null, approved: true, admin: true };
+    const log = lines.map((l) => `${l.ts.slice(11, 16)} ${l.who}: ${l.text}`).join("\n");
+    const resp = await this.llm.messages({
+      model: MODEL_FAST, max_tokens: 800,
+      system: "Ты помогаешь команде TheBearLab не терять договорённости. Из переписки выдели только то, что стоит помнить: принятые решения, выводы, договорённости (кто что делает и к какому сроку), важные факты по проекту. Болтовню, шутки и вопросы без ответа пропускай. Не повторяй то, что уже есть в памяти. Ответь строго JSON-массивом объектов {\"kind\": \"Решение|Вывод|Договорённость|Факт\", \"text\": \"одна законченная фраза\"}; если сохранять нечего — [].",
+      messages: [{ role: "user", content: `${await this.context(admin)}\n\nПереписка в общем чате:\n${log}` }],
+    });
+    const raw = (resp.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    let items: { kind: string; text: string }[] = [];
+    try { items = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1)); } catch { return []; }
+    const saved: string[] = [];
+    for (const it of items.slice(0, 8)) {
+      if (!it || typeof it.text !== "string" || !it.text.trim()) continue;
+      const before = (await memories(this.st)).length;
+      const mm = await remember(this.st, this.clock, it.text, it.kind, "Общий чат", "общий чат");
+      if ((await memories(this.st)).length > before) saved.push(`${mm.kind}: ${mm.text}`);
+    }
+    return saved;
   }
 
   /** Weekly deep review by Opus: where we are stuck, what to change. Plain text. */
