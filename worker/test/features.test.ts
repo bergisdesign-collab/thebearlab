@@ -391,3 +391,46 @@ it("task markers: assignee colour, ⚪ free, 🔴 overdue, ✅ done; legend in /
   await w.text(ME, w.dm(ME), "/team");
   assert.match(w.tg.shown(), /Маркеры задач:.*⚪ свободна · 🔴 просрочена/);
 });
+
+it("joint tasks: 🤝 marker, partner joins, both have it in the cabinet, Notion gets both people", async () => {
+  const w = await world();
+  const st0 = w.st();
+  for (const [id, nid] of [[ME.id, "aaaaaaaa-0000-0000-0000-000000000001"], [ANYA.id, "aaaaaaaa-0000-0000-0000-000000000002"]] as const) {
+    const m = (await st0.members()).find((x) => x.tg_id === id)!;
+    if (!m.notion_user_id) { m.notion_user_id = nid; await st0.put("member", String(id), m); }
+  }
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  w.tg.sent = [];
+  await w.press(ANYA, w.grp, `t:join:${w.ids.t_fabric}`);
+  const t = (await w.st().task(w.ids.t_fabric))!;
+  assert.deepEqual(t.co_tg, [ANYA.id]);
+  assert.match(said(dmTo(w, ANYA.id)), /Делаем вместе 🤝 — ты в задаче/);              // joined in the group → card in private
+  assert.match(said(dmTo(w, ME.id)), /присоединился\(ась\) — делаем вместе/);         // the lead hears about it
+  w.tg.sent = [];
+  await w.text(ANYA, w.dm(ANYA), "/my");
+  assert.match(w.tg.shown(), /🤝 Найти поставщика ткани/);
+  await w.press(ME, w.dm(ME), `t:v:${w.ids.t_fabric}`);
+  assert.match(w.tg.shown(), /Исполнитель:(\*\*)? 🤝 Сергей \\?\+ Аня/);
+  await w.post("/tick", {});                                                           // push to Notion
+  const people = w.fn.page(w.ids.t_fabric).properties["Исполнитель"].people.map((p: any) => p.id);
+  assert.equal(people.length, 2);
+  await w.press(ANYA, w.dm(ANYA), `t:leave:${w.ids.t_fabric}`);
+  assert.deepEqual((await w.st().task(w.ids.t_fabric))!.co_tg, []);
+});
+
+it("joint task set up in Notion (two people) shows 🤝 and is in both cabinets", async () => {
+  const w = await world();
+  const st0 = w.st();
+  for (const [id, nid] of [[ME.id, "aaaaaaaa-0000-0000-0000-000000000001"], [ANYA.id, "aaaaaaaa-0000-0000-0000-000000000002"]] as const) {
+    const m = (await st0.members()).find((x) => x.tg_id === id)!;
+    if (!m.notion_user_id) { m.notion_user_id = nid; await st0.put("member", String(id), m); }
+  }
+  w.fn.edit(w.ids.t_after, "Исполнитель", { type: "people", people: [{ id: "aaaaaaaa-0000-0000-0000-000000000001" }, { id: "aaaaaaaa-0000-0000-0000-000000000002" }] });
+  await w.post("/tick", {});
+  const t = (await w.st().task(w.ids.t_after))!;
+  assert.equal(t.assignee_tg, ME.id);
+  assert.deepEqual(t.co_tg, [ANYA.id]);
+  w.tg.sent = [];
+  await w.text(ANYA, w.dm(ANYA), "/my");
+  assert.match(w.tg.shown(), /🤝 Утвердить гейм-диздок/);
+});

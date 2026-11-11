@@ -60,7 +60,7 @@ export async function boardState(app: App, m: Member): Promise<string> {
   const tasks = await st.tasks();
   const [, , pct] = logic.progress(tasks);
   const names = await Names.load(st);
-  const mine = tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t))
+  const mine = tasks.filter((t) => logic.isMine(t, m.tg_id) && !isDone(t))
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   const next = logic.suggest(tasks, await st.milestones(), null, today, 1)[0];
   const due = (d: string | null): string => {

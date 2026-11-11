@@ -110,7 +110,7 @@ export async function run(job: string, st: Storage, clock: Clock, extras: JobExt
   } else if (job === "checkin") {
     const tasks = await st.tasks();
     for (const m of members) {
-      const mine = tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t));
+      const mine = tasks.filter((t) => logic.isMine(t, m.tg_id) && !isDone(t));
       if (!mine.length) continue;
       await st.kvSet(`await:${m.tg_id}`, { a: "checkin", d: today });
       const inWork = mine.filter((t) => t.status === "В работе").slice(0, 5);

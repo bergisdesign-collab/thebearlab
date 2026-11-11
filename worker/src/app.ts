@@ -28,7 +28,7 @@ const S = (text: string, kb: Btn[][] = []): Screen => ({ text, kb });
 const R = (screen?: Screen, extra: Partial<Result> = {}): Result => ({ screen, notices: [], ...extra });
 
 const STATUS_BTN: Record<string, string> = { "Не начато": "⚪ Не начато", "В работе": "🔵 В работу", "На проверке": "🟡 На проверку", "Готово": "✅ Готово" };
-const BROADCAST_ICON: Record<string, string> = { take: "🙋", release: "↩️", assign: "👥", done: "✅", status: "🔄", due: "📅", create: "➕", result: "🔗" };
+const BROADCAST_ICON: Record<string, string> = { join: "🤝", leave: "↩️", take: "🙋", release: "↩️", assign: "👥", done: "✅", status: "🔄", due: "📅", create: "➕", result: "🔗" };
 
 export const MENU: Btn[][] = [
   [B("Сводка", "go:today"), B("Мой кабинет", "go:my"), B("Что дальше", "go:next")],
@@ -105,7 +105,7 @@ export class App {
   // entry points
   // =========================================================================
   async onCommand(who: Who, chatId: number, isPrivate: boolean, cmd: string, args = ""): Promise<Result> {
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     this.chat = chatId;
     cmd = cmd.toLowerCase().split("@")[0];
     if (cmd === "start") return this.start(who);
@@ -172,7 +172,7 @@ export class App {
   }
 
   async onText(who: Who, chatId: number, isPrivate: boolean, text: string): Promise<Result | null> {
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     this.chat = chatId;
     if (!isPrivate) return null;
     const m = await this.member(who);
@@ -186,7 +186,7 @@ export class App {
 
   /** A group message addressed to the bot (@mention or reply). */
   async onGroupText(who: Who, chatId: number, text: string): Promise<Result | null> {
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     this.chat = chatId;
     const m = await this.member(who);
     if (!m) return R(S("Чтобы я отвечал тебе, напиши мне в личку /start — администратор примет заявку."));
@@ -196,7 +196,7 @@ export class App {
   }
 
   async onCallback(who: Who, chatId: number, data: string): Promise<Result> {
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     this.chat = chatId;
     const m = await this.member(who);
     if (!m) return R(undefined, { toast: "Ты ещё не в команде — отправь /start боту в личку", alert: true });
@@ -296,7 +296,7 @@ export class App {
   /** Personal task cabinet: my tasks grouped by urgency, my reminders. */
   async scrMy(m: Member): Promise<Screen> {
     const today = this.today();
-    const mine = (await this.st.tasks()).filter((t) => t.assignee_tg === m.tg_id && !isDone(t));
+    const mine = (await this.st.tasks()).filter((t) => logic.isMine(t, m.tg_id) && !isDone(t));
     const reminders = (await this.st.all<{ id: string; tg: number; at: string; text: string; by: string }>("reminder")).filter((r) => r.tg === m.tg_id).sort((a, b) => a.at.localeCompare(b.at));
     if (!mine.length && !reminders.length) {
       return S("<b>Мой кабинет</b>\n\nНа тебе нет открытых задач. Посмотри /free или /next.", [[B("Свободные", "go:free"), B("Что дальше", "go:next")], [B("⚙️ Настройки", "go:settings")]]);
@@ -432,8 +432,12 @@ export class App {
     const row: Btn[] = [];
     if (!isDone(t)) {
       if (t.assignee_tg === m.tg_id) row.push(B("↩️ Снять с себя", `t:rel:${t.id}`));
+      else if ((t.co_tg || []).includes(m.tg_id)) row.push(B("↩️ Выйти из задачи", `t:leave:${t.id}`));
       else if (logic.isFree(t)) row.push(B("🙋 Взять", `t:take:${t.id}`));
-      else if (m.admin) row.push(B("↩️ Освободить", `t:rel:${t.id}`));
+      else {
+        row.push(B("🤝 Делать вместе", `t:join:${t.id}`));
+        if (m.admin) row.push(B("↩️ Освободить", `t:rel:${t.id}`));
+      }
     }
     row.push(B("👥 Назначить", `t:asg:${t.id}`));
     kb.push(row);
@@ -470,13 +474,17 @@ export class App {
     }
     if (evs.length) {
       const summary = evs.map((e) => e.text).join("; ");
-      for (const uid of new Set([prevOwner, t.assignee_tg])) {
+      for (const uid of new Set([prevOwner, t.assignee_tg, ...(t.co_tg || [])])) {
         if (uid && uid !== m.tg_id) {
           if (uid === t.assignee_tg && uid !== prevOwner) notices.push(await this.cabinetCard(t, uid, `${m.name} назначил(а) тебе задачу`));
+          else if (uid === this.svc.joined) notices.push(await this.cabinetCard(t, uid, `${m.name} позвал(а) тебя делать вместе 🤝`));
           else notices.push({ chatId: uid, text: `<b>${esc(m.name)}</b> → «${esc(t.title)}»: ${esc(summary)}`, kb: [[B("Открыть", `t:v:${t.id}`)]] });
         }
       }
       // took it yourself in a group or by voice → the card still lands in your private chat
+      if (this.svc.joined === m.tg_id && this.chat !== m.tg_id && (await getPrefs(this.st, m.tg_id)).cabinet) {
+        notices.push(await this.cabinetCard(t, m.tg_id, "Делаем вместе 🤝 — ты в задаче"));
+      }
       if (t.assignee_tg === m.tg_id && prevOwner !== m.tg_id && this.chat !== m.tg_id && (await getPrefs(this.st, m.tg_id)).cabinet) {
         notices.push(await this.cabinetCard(t, m.tg_id, "Ты взял(а) задачу"));
       }
@@ -501,7 +509,7 @@ export class App {
 
   private async after(m: Member, t: Task, prevOwner: number | null, toast: string): Promise<Result> {
     const notices = await this.noticesFor(m, t, prevOwner);
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     return R(await this.scrTask(m, t), { notices, toast });
   }
 
@@ -514,6 +522,8 @@ export class App {
       case "v": return R(await this.scrTask(m, t));
       case "take": return this.after(m, await this.svc.take(t, m), prev, "Задача твоя");
       case "rel": return this.after(m, await this.svc.release(t, m), prev, "Задача освобождена");
+      case "join": return this.after(m, await this.svc.join(t, m), prev, "Делаем вместе 🤝");
+      case "leave": return this.after(m, await this.svc.leave(t, m), prev, "Ты вышел(ла) из задачи");
       case "asg": {
         const kb: Btn[][] = (await this.st.members()).filter((x) => x.approved)
           .map((x) => [B((x.tg_id === t.assignee_tg ? "✓ " : "") + x.name, `t:to:${t.id}:${x.tg_id}`)]);
@@ -597,14 +607,14 @@ export class App {
       it.state = "ok";
       if (!t || isDone(t) || !target) continue;
       const prev = t.assignee_tg;
-      this.svc.recent = [];
+      this.svc.recent = []; this.svc.joined = null;
       let cur = t;
       if (cur.assignee_tg !== target.tg_id) cur = await this.svc.assign(cur, m, target);
       if (it.due && cur.due !== it.due) cur = await this.svc.setDue(cur, m, it.due);
       notices.push(...(await this.noticesFor(m, cur, prev)).filter((n) => n.chatId !== Number(this.chat)));
       applied++;
     }
-    this.svc.recent = [];
+    this.svc.recent = []; this.svc.joined = null;
     await this.st.kvSet("week_plan", plan);
     const tasks = new Map((await this.st.tasks()).map((t) => [t.id, t]));
     const names = new Map(members.map((x) => [x.tg_id, x.name]));
@@ -750,7 +760,7 @@ export class App {
         }
         continue;
       }
-      const active = tasks.filter((t) => t.assignee_tg === x.tg_id && !isDone(t));
+      const active = tasks.filter((t) => logic.isMine(t, x.tg_id) && !isDone(t));
       const od = logic.overdue(active, this.today()).length;
       const done = tasks.filter((t) => t.assignee_tg === x.tg_id && isDone(t)).length;
       const link = x.notion_user_id ? notion.get(x.notion_user_id) || "" : "";

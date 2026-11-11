@@ -127,6 +127,7 @@ export class Syncer {
       description: read(pr["Описание"]) || "",
       result: read(pr["Результат"]) || "",
       assignee_notion: people[0] || null,
+      co_notion: people.slice(1),
       log: read(pr["Журнал"]) || "",
       milestones: read(pr["Веха"]) || [],
       depends_on: ((read(pr["Зависит от"]) || []) as string[]).map((x) => this.n2l.get(x) || x),
@@ -143,6 +144,16 @@ export class Syncer {
           t.assignee_notion = v as string | null;
           t.assignee_tg = (v && byNotionUser.get(v as string)) || null;
         }
+        continue;
+      }
+      if (f === "co_notion") {
+        if (dirty.has("assignee_notion")) continue;
+        const list = (v as string[]) || [];
+        const linkedTg = new Set(byNotionUser.values());
+        // partners without a Notion link exist only in the bot: keep them
+        const botOnly = (t.co_tg || []).filter((x) => !linkedTg.has(x));
+        t.co_notion = list;
+        t.co_tg = [...new Set([...list.map((x) => byNotionUser.get(x)).filter((x): x is number => !!x), ...botOnly])].filter((x) => x !== t.assignee_tg);
         continue;
       }
       (t as any)[f] = v;
@@ -209,7 +220,7 @@ export class Syncer {
   // ------------------------------------------------------------------- push
   private taskValue(t: Task, f: string): unknown {
     if (f === "due") return [t.start, t.due];
-    if (f === "assignee_notion") return t.assignee_notion ? [t.assignee_notion] : [];
+    if (f === "assignee_notion") return [...new Set([t.assignee_notion, ...(t.co_notion || [])].filter(Boolean))];
     if (f === "depends_on") return t.depends_on.filter((x) => this.l2n.has(x)).map((x) => this.l2n.get(x));
     return (t as any)[f];
   }

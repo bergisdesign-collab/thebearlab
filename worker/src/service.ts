@@ -15,6 +15,7 @@ export class ActionError extends Error {}
 const fmt = (d: string | null): string => (d ? `${d.slice(8, 10)}.${d.slice(5, 7)}` : "—");
 
 export class Service {
+  joined: number | null = null;   // who joined a task in the last action («делаем вместе»)
   st: Storage;
   clock: Clock;
   recent: Event[] = [];   // events produced since the caller last cleared it
@@ -55,7 +56,7 @@ export class Service {
     if (t.assignee_tg === m.tg_id) throw new ActionError("Задача уже у тебя");
     if (t.assignee_tg) {
       const owner = await this.st.member(t.assignee_tg);
-      throw new ActionError(`Задачу ведёт ${owner ? owner.name : "другой участник"}`);
+      throw new ActionError(`Задачу ведёт ${owner ? owner.name : "другой участник"}. Чтобы делать вместе — нажми «🤝 Делать вместе»`);
     }
     t.assignee_tg = m.tg_id;
     t.assignee_notion = m.notion_user_id;
@@ -65,11 +66,47 @@ export class Service {
     return this.save(t);
   }
 
+  /** «Делаем вместе»: join a task someone already leads. */
+  async join(t: Task, m: Member, by: Member = m): Promise<Task> {
+    if (t.status === DONE) throw new ActionError("Задача уже выполнена");
+    if (!t.assignee_tg && !t.assignee_notion) return by.tg_id === m.tg_id ? this.take(t, m) : this.assign(t, by, m);
+    if (t.assignee_tg === m.tg_id || t.co_tg.includes(m.tg_id)) throw new ActionError(`${by.tg_id === m.tg_id ? "Ты уже" : m.name + " уже"} в этой задаче`);
+    t.co_tg = [...t.co_tg, m.tg_id];
+    this.joined = m.tg_id;
+    if (m.notion_user_id && !t.co_notion.includes(m.notion_user_id) && m.notion_user_id !== t.assignee_notion) t.co_notion = [...t.co_notion, m.notion_user_id];
+    markTask(t, "assignee_notion");
+    await this.log(t, by, "join", by.tg_id === m.tg_id ? "присоединился(ась) — делаем вместе 🤝" : `${m.name} добавлен(а) — делаем вместе 🤝`);
+    return this.save(t);
+  }
+
+  async leave(t: Task, m: Member): Promise<Task> {
+    if (!t.co_tg.includes(m.tg_id)) throw new ActionError("Ты не участвуешь в этой задаче");
+    t.co_tg = t.co_tg.filter((x) => x !== m.tg_id);
+    t.co_notion = t.co_notion.filter((x) => x !== m.notion_user_id);
+    markTask(t, "assignee_notion");
+    await this.log(t, m, "leave", "вышел(ла) из совместной задачи");
+    return this.save(t);
+  }
+
   async release(t: Task, m: Member): Promise<Task> {
+    if (t.co_tg.includes(m.tg_id)) return this.leave(t, m);
     if (t.assignee_tg !== m.tg_id && !m.admin) throw new ActionError("Снять с себя можно только свою задачу");
+    if (t.assignee_tg === m.tg_id && t.co_tg.length) {
+      // the lead steps out: the first partner leads now
+      const next = await this.st.member(t.co_tg[0]);
+      t.assignee_tg = t.co_tg[0];
+      t.assignee_notion = next?.notion_user_id || null;
+      t.co_tg = t.co_tg.slice(1);
+      t.co_notion = t.co_notion.filter((x) => x !== t.assignee_notion);
+      markTask(t, "assignee_notion");
+      await this.log(t, m, "release", `вышел(ла) из задачи, ведёт ${next ? next.name : "партнёр"}`);
+      return this.save(t);
+    }
     const prev = t.assignee_tg ? await this.st.member(t.assignee_tg) : null;
     t.assignee_tg = null;
     t.assignee_notion = null;
+    t.co_tg = [];
+    t.co_notion = [];
     markTask(t, "assignee_notion");
     if (t.status === "В работе") { t.status = "Не начато"; markTask(t, "status"); }
     const who = !prev || prev.tg_id === m.tg_id ? "" : ` (была у ${prev.name})`;
@@ -81,6 +118,8 @@ export class Service {
     if (t.assignee_tg === target.tg_id) throw new ActionError(`Уже назначена на ${target.name}`);
     t.assignee_tg = target.tg_id;
     t.assignee_notion = target.notion_user_id;
+    t.co_tg = t.co_tg.filter((x) => x !== target.tg_id);
+    t.co_notion = t.co_notion.filter((x) => x !== target.notion_user_id);
     markTask(t, "assignee_notion");
     await this.log(t, actor, "assign", `назначена на ${target.name}`);
     return this.save(t);

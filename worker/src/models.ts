@@ -34,6 +34,8 @@ export interface Task {
   depends_on: string[];          // task ids
   assignee_tg: number | null;
   assignee_notion: string | null;
+  co_tg: number[];               // partners: «делаем вместе»
+  co_notion: string[];           // the other people in Notion «Исполнитель»
   log: string;
   notion_id: string | null;
   notion_edited: string;
@@ -46,7 +48,7 @@ export function newTask(p: Partial<Task> & { id: string; title: string }): Task 
   return {
     stage: "", type: "Задача", status: "Не начато", priority: "Средний", start: null, due: null,
     description: "", result: "", milestones: [], depends_on: [], assignee_tg: null,
-    assignee_notion: null, log: "", notion_id: null, notion_edited: "", dirty: [], rev: 0,
+    assignee_notion: null, co_tg: [], co_notion: [], log: "", notion_id: null, notion_edited: "", dirty: [], rev: 0,
     archived: false, ...p,
   };
 }

@@ -17,7 +17,7 @@ export interface PlanInput { tasks: Task[]; members: Member[]; load: Map<number,
 export async function planInput(st: Storage, today: string): Promise<PlanInput> {
   const tasks = await st.tasks();
   const members = (await st.members()).filter((m) => m.approved);
-  const load = new Map(members.map((m) => [m.tg_id, tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t)).length]));
+  const load = new Map(members.map((m) => [m.tg_id, tasks.filter((t) => logic.isMine(t, m.tg_id) && !isDone(t)).length]));
   const free = logic.suggest(tasks, await st.milestones(), null, today, 12).map((s) => s.task).filter((t) => !t.assignee_tg && !t.assignee_notion);
   // also my own tasks without a date — they get a date proposal
   const undated = tasks.filter((t) => t.assignee_tg && !isDone(t) && !t.due && t.status !== "На проверке").slice(0, 4);

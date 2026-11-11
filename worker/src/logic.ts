@@ -116,11 +116,21 @@ export function nextMilestone(milestones: Milestone[], today: string): Milestone
 
 // --- mentor -----------------------------------------------------------------
 
+/** Main assignee or partner. */
+export function isMine(t: Task, tgId: number | null): boolean {
+  return tgId !== null && (t.assignee_tg === tgId || (t.co_tg || []).includes(tgId));
+}
+
+/** Done together by two or more people. */
+export function isJoint(t: Task): boolean {
+  return !!(t.assignee_tg || t.assignee_notion) && ((t.co_tg || []).length > 0 || (t.co_notion || []).length > 0);
+}
+
 export function scoreTask(t: Task, tasks: Task[], msById: Map<string, Milestone>, tgId: number | null,
                           today: string): [number, string[]] {
   const reasons: string[] = [];
   let score = (PRIORITIES[t.priority] ?? 2) * 10;
-  const mine = tgId !== null && t.assignee_tg === tgId;
+  const mine = isMine(t, tgId);
   if (mine && t.status === "В работе") { score += 100; reasons.push("ты уже ведёшь её"); }
   else if (mine) { score += 20; reasons.push("назначена на тебя"); }
   if (t.priority === "Высокий") reasons.push("высокий приоритет");
@@ -153,7 +163,7 @@ export function suggest(tasks: Task[], milestones: Milestone[], tgId: number | n
   const out: Suggestion[] = [];
   for (const t of tasks) {
     if (isDone(t) || t.status === "На проверке") continue;
-    const mine = tgId !== null && t.assignee_tg === tgId;
+    const mine = isMine(t, tgId);
     if (!mine && !isFree(t)) continue;
     if (openDeps(t, byId).length) continue;
     const [score, reasons] = scoreTask(t, tasks, msById, tgId, today);

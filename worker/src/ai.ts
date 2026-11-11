@@ -127,6 +127,8 @@ export const TOOLS: Record<string, ReturnType<typeof S>> = {
   roadmap_overview: S("Сводка: прогресс, вехи и их риски, просрочки, ближайшие сроки, загрузка команды."),
   suggest_next: S("Что делать дальше: задачи по приоритету, срокам, вехам и зависимостям, с причинами.", { member: str("me | имя участника | free") }),
   take_task: S("Взять задачу на себя (на того, кто пишет).", { task: TASK }, ["task"]),
+  join_task: S("«Делаем вместе»: добавить участника (или того, кто пишет) в задачу, которую уже ведёт другой. Если задача свободна — участник её возьмёт.", { task: TASK, member: str("me или имя участника") }, ["task"]),
+  leave_task: S("Выйти из совместной задачи (для того, кто пишет).", { task: TASK }, ["task"]),
   assign_task: S("Назначить задачу участнику или освободить её.", { task: TASK, member: str("Имя участника, me или nobody") }, ["task", "member"]),
   set_status: S("Сменить статус задачи.", { task: TASK, status: str("Новый статус", { enum: STATUSES }) }, ["task", "status"]),
   set_due: S("Установить срок задачи или убрать его.", { task: TASK, date: str("YYYY-MM-DD или пустая строка, чтобы убрать срок") }, ["task", "date"]),
@@ -293,6 +295,7 @@ export class Assistant {
   private async afterChange(m: Member, t: Task, prev: number | null): Promise<void> {
     this.changed.add(t.id);
     this.notices.push(...(await this.app.noticesFor(m, t, prev)));
+    this.app.svc.joined = null;
   }
 
   // --- tool execution -----------------------------------------------------------
@@ -312,11 +315,11 @@ export class Assistant {
         if (input.stage) ts = ts.filter((t) => t.stage === input.stage);
         if (input.overdue) ts = logic.overdue(ts, today);
         const a = (input.assignee || "any").toLowerCase();
-        if (a === "me") ts = ts.filter((t) => t.assignee_tg === m.tg_id);
+        if (a === "me") ts = ts.filter((t) => logic.isMine(t, m.tg_id));
         else if (a === "free") ts = ts.filter(logic.isFree);
         else if (a !== "any") {
           const who = await this.resolveMember(m, a);
-          ts = ts.filter((t) => (who ? t.assignee_tg === who.tg_id : logic.isFree(t)));
+          ts = ts.filter((t) => (who ? logic.isMine(t, who.tg_id) : logic.isFree(t)));
         }
         return { count: ts.length, tasks: ts.slice(0, 30).map((t) => this.brief(t, names)) };
       }
@@ -356,6 +359,22 @@ export class Assistant {
         const t = await this.resolveTask(input.task);
         const prev = t.assignee_tg;
         await svc.take(t, m);
+        await this.afterChange(m, t, prev);
+        return { ok: true, task: this.brief(t, names) };
+      }
+      case "join_task": {
+        const t = await this.resolveTask(input.task);
+        const who = !input.member || String(input.member).toLowerCase() === "me" ? m : await this.resolveMember(m, String(input.member));
+        if (!who) throw new ActionError(`Не нашёл участника «${input.member}»`);
+        const prev = t.assignee_tg;
+        await svc.join(t, who, m);
+        await this.afterChange(m, t, prev);
+        return { ok: true, task: this.brief(t, names) };
+      }
+      case "leave_task": {
+        const t = await this.resolveTask(input.task);
+        const prev = t.assignee_tg;
+        await svc.leave(t, m);
         await this.afterChange(m, t, prev);
         return { ok: true, task: this.brief(t, names) };
       }
@@ -447,8 +466,8 @@ export class Assistant {
         const tasks = await this.st.tasks();
         return (await this.st.members()).filter((x) => x.approved).map((x) => ({
           name: x.name, admin: x.admin,
-          open: tasks.filter((t) => t.assignee_tg === x.tg_id && !isDone(t)).length,
-          overdue: logic.overdue(tasks.filter((t) => t.assignee_tg === x.tg_id), today).length,
+          open: tasks.filter((t) => logic.isMine(t, x.tg_id) && !isDone(t)).length,
+          overdue: logic.overdue(tasks.filter((t) => logic.isMine(t, x.tg_id)), today).length,
         }));
       }
     }

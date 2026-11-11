@@ -73,6 +73,7 @@ export class Names {
   marker(t: Task, today: string): string {
     if (isDone(t)) return "✅";
     if (t.due && t.due < today) return "🔴";
+    if (logic.isJoint(t)) return "🤝";
     const tg = t.assignee_tg || (t.assignee_notion ? this.byNotion.get(t.assignee_notion) : undefined);
     if (tg) return this.colors[`tg:${tg}`] || "⚪";
     if (t.assignee_notion) return this.colors[`n:${t.assignee_notion}`] || "⚪";
@@ -84,13 +85,19 @@ export class Names {
     const out: string[] = [];
     for (const m of this.members.values()) if (m.approved && this.colors[`tg:${m.tg_id}`]) out.push(`${this.colors[`tg:${m.tg_id}`]} ${m.name}`);
     for (const [id, name] of this.notion) if (this.colors[`n:${id}`] && name) out.push(`${this.colors[`n:${id}`]} ${name}`);
-    return [...out, "⚪ свободна", "🔴 просрочена"].join(" · ");
+    return [...out, "🤝 вместе", "⚪ свободна", "🔴 просрочена"].join(" · ");
   }
 
   of(t: Task): string {
-    if (t.assignee_tg && this.members.has(t.assignee_tg)) return this.members.get(t.assignee_tg)!.name;
-    if (t.assignee_notion) return this.notion.get(t.assignee_notion) || "участник Notion";
-    return "";
+    let lead = "";
+    if (t.assignee_tg && this.members.has(t.assignee_tg)) lead = this.members.get(t.assignee_tg)!.name;
+    else if (t.assignee_notion) lead = this.notion.get(t.assignee_notion) || "участник Notion";
+    if (!lead) return "";
+    const co = [
+      ...(t.co_tg || []).map((x) => this.members.get(x)?.name).filter(Boolean),
+      ...(t.co_notion || []).filter((x) => !this.byNotion.has(x)).map((x) => this.notion.get(x) || "участник Notion"),
+    ];
+    return [lead, ...new Set(co)].join(" + ");
   }
 }
 
@@ -221,7 +228,7 @@ export async function teamDigest(st: Storage, today: string, title = "Сводк
 export async function personal(st: Storage, m: Member, today: string, evening = false): Promise<string | null> {
   const tasks = await st.tasks();
   const names = await Names.load(st);
-  const mine = tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t));
+  const mine = tasks.filter((t) => logic.isMine(t, m.tg_id) && !isDone(t));
   const od = logic.overdue(mine, today);
   const td = logic.dueOn(mine, today);
   const tomorrow = logic.dueOn(mine, addDays(today, 1));
@@ -322,9 +329,10 @@ export const HELP = `<b>the Bear Lab Bot</b> — штурман по роадм�
 /memory — память команды: решения, выводы, договорённости
 /sync — синхронизировать с Notion сейчас
 
-В карточке задачи: взять / снять с себя / назначить, статус, перенос срока, результат (ссылка), заметка в журнал, история.
+В карточке задачи: взять / снять с себя / назначить / 🤝 делать вместе (несколько исполнителей, как в Notion), статус, перенос срока, результат (ссылка), заметка в журнал, история.
 Все изменения видны команде и попадают в Notion (поле «Журнал»).
 Когда задача попадает на тебя (взял сам — в чате, голосом или через ИИ — или тебе назначили), карточка приходит в личку; бот напоминает о сроке накануне вечером и утром в день срока.
+Маркеры задач: цвет исполнителя, 🤝 — делаем вместе, ⚪ — свободна, 🔴 — просрочена, ✅ — готово.
 Напоминания: «Бро, напомни Ане в четверг в 10 про образцы».
 Каждый вечер в 19:00 — чек-ин «что сегодня продвинулось?»: ответь текстом или голосом, бот разнесёт по журналам задач.
 В понедельник — план недели с кнопками, в пятницу — итоги с графиком прогресса.
