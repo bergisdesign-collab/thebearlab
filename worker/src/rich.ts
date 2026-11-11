@@ -30,7 +30,7 @@ function dueCell(t: Task, today: string): string {
 
 function taskTable(tasks: Task[], names: Names, today: string, withWho = true): string {
   const head = withWho ? "| Задача | Срок | Кто |\n|:--|:--:|:--|" : "| Задача | Срок |\n|:--|:--:|";
-  const rows = tasks.map((t) => `| ${STATUS_ICON[t.status] || "⚪"} ${cell(t.title)} | ${dueCell(t, today)} |${withWho ? ` ${cell(names.of(t) || "свободна", 16)} |` : ""}`);
+  const rows = tasks.map((t) => `| ${names.marker(t, today)} ${cell(t.title)} | ${dueCell(t, today)} |${withWho ? ` ${cell(names.of(t) || "свободна", 16)} |` : ""}`);
   return [head, ...rows].join("\n");
 }
 
@@ -103,7 +103,7 @@ export async function taskCard(t: Task, st: Storage, today: string, events: Even
     facts.push(`- **Срок:** ${t.start ? shortDate(t.start) + "–" : ""}${shortDate(t.due)}${rel}`);
   }
   const who = names.of(t);
-  facts.push(`- **Исполнитель:** ${who ? md(who) : "свободна — можно взять"}`);
+  facts.push(`- **Исполнитель:** ${names.marker(t, today)} ${who ? md(who) : "свободна — можно взять"}`);
   facts.push(`- **Этап:** ${md(t.stage || "без этапа")} · ${md(t.type)} · приоритет ${md(t.priority.toLowerCase())}`);
   const ml = t.milestones.filter((i) => ms.has(i)).map((i) => `${md(ms.get(i)!.title)} (${shortDate(ms.get(i)!.date)})`);
   if (ml.length) facts.push(`- **Веха:** ${ml.join(", ")}`);

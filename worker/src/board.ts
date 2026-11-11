@@ -11,6 +11,7 @@ import { isDone, shortId } from "./models.ts";
 import type { Member } from "./models.ts";
 import { ActionError } from "./service.ts";
 import type { TelegramApi } from "./telegram.ts";
+import { Names } from "./texts.ts";
 
 export const BOARD_HTML = `<style>
 body{margin:0;padding:10px 12px 4px;font:15px system-ui,sans-serif}
@@ -58,6 +59,7 @@ export async function boardState(app: App, m: Member): Promise<string> {
   const st = app.st;
   const tasks = await st.tasks();
   const [, , pct] = logic.progress(tasks);
+  const names = await Names.load(st);
   const mine = tasks.filter((t) => t.assignee_tg === m.tg_id && !isDone(t))
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   const next = logic.suggest(tasks, await st.milestones(), null, today, 1)[0];
@@ -72,7 +74,7 @@ export async function boardState(app: App, m: Member): Promise<string> {
     n: next ? [shortId(next.task.id), cut(next.task.title, 26), due(next.task.due)] : null,
   };
   for (const [count, len] of [[5, 28], [4, 24], [3, 20], [2, 18], [1, 16], [0, 0]]) {
-    const t = mine.slice(0, count).map((x) => [shortId(x.id), cut(x.title, len), due(x.due), x.status === "В работе" ? "🔵" : "⚪", x.due && x.due < today ? 1 : 0]);
+    const t = mine.slice(0, count).map((x) => [shortId(x.id), cut(x.title, len), due(x.due), names.marker(x, today), x.due && x.due < today ? 1 : 0]);
     const json = JSON.stringify({ ...base, t });
     if (new TextEncoder().encode(json).length <= 1000) return json;
   }

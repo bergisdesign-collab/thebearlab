@@ -368,3 +368,26 @@ it("assigned in Notion → a card in the assignee's private chat", async () => {
   assert.match(said(dmTo(w, ANYA.id)), /Тебя назначили в Notion[\s\S]*Найти поставщика ткани/);
   void NOTION_TASKS_DB;
 });
+
+it("task markers: assignee colour, ⚪ free, 🔴 overdue, ✅ done; legend in /team", async () => {
+  const w = await world();
+  await w.press(ME, w.dm(ME), `t:take:${w.ids.t_fabric}`);
+  await w.press(ME, w.dm(ME), `t:to:${w.ids.t_after}:${ANYA.id}`);
+  w.tg.sent = [];
+  await w.text(ME, w.dm(ME), "/tasks");
+  await w.press(ME, w.dm(ME), "s:all");
+  const st = w.st();
+  const colors = await st.kvGet<Record<string, string>>("colors");
+  const mine = colors![`tg:${ME.id}`], anya = colors![`tg:${ANYA.id}`];
+  assert.notEqual(mine, anya);
+  assert.ok(![mine, anya].includes("⚪") && ![mine, anya].includes("🔴"));
+  const labels = w.tg.sent.flatMap((x) => (x.body.reply_markup?.inline_keyboard || []).flat().map((b: any) => b.text as string));
+  const lab = (title: string) => labels.find((l) => l.includes(title)) || "";
+  for (const s of ["0", "1", "2", "3", "4", "5"]) { if (!lab("Найти поставщика")) { await w.press(ME, w.dm(ME), `s:${s}`); labels.push(...w.tg.sent.flatMap((x) => (x.body.reply_markup?.inline_keyboard || []).flat().map((b: any) => b.text as string))); } }
+  assert.ok(lab("Найти поставщика ткани").startsWith(mine), lab("Найти поставщика ткани"));
+  assert.ok(lab("Утвердить гейм-диздок").startsWith(anya), lab("Утвердить гейм-диздок"));
+  assert.ok(lab("Написать гейм-диздок").startsWith("🔴"));
+  assert.ok(lab("Решить, успеваем").startsWith("⚪"));
+  await w.text(ME, w.dm(ME), "/team");
+  assert.match(w.tg.shown(), /Маркеры задач:.*⚪ свободна · 🔴 просрочена/);
+});

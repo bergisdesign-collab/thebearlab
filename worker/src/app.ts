@@ -287,9 +287,10 @@ export class App {
       rich: await rich.digest(this.st, this.today()) };
   }
 
-  private taskButtons(tasks: Task[]): Btn[][] {
+  private async taskButtons(tasks: Task[]): Promise<Btn[][]> {
     const today = this.today();
-    return tasks.map((t) => [B(texts.buttonLabel(t, today), `t:v:${t.id}`)]);
+    const names = await texts.Names.load(this.st);
+    return tasks.map((t) => [B(texts.buttonLabel(t, today, names), `t:v:${t.id}`)]);
   }
 
   /** Personal task cabinet: my tasks grouped by urgency, my reminders. */
@@ -310,11 +311,12 @@ export class App {
     const lines = [`<b>Мой кабинет · ${esc(m.name)}</b>`, `Открытых задач: ${mine.length}`];
     const mdl = [`### Мой кабинет · ${rich.md(m.name)}`, `Открытых задач: **${mine.length}**`];
     const kb: Btn[][] = [];
+    const names = await texts.Names.load(this.st);
     for (const [title, ts] of groups) {
       if (!ts.length) continue;
-      lines.push("", `<b>${title} (${ts.length})</b>`, ...ts.map((t) => `• ${esc(t.title)}${t.due ? " · " + texts.shortDate(t.due) : ""}`));
-      mdl.push(`#### ${title} (${ts.length})`, ts.map((t) => `- ${rich.md(t.title)}${t.due ? ` · ${texts.shortDate(t.due)}` : ""}`).join("\n"));
-      for (const t of ts) if (kb.length < 30) kb.push([B(texts.buttonLabel(t, today), `t:v:${t.id}`)]);
+      lines.push("", `<b>${title} (${ts.length})</b>`, ...ts.map((t) => `${names.marker(t, today)} ${esc(t.title)}${t.due ? " · " + texts.shortDate(t.due) : ""}`));
+      mdl.push(`#### ${title} (${ts.length})`, ts.map((t) => `- ${names.marker(t, today)} ${rich.md(t.title)}${t.due ? ` · ${texts.shortDate(t.due)}` : ""}`).join("\n"));
+      for (const t of ts) if (kb.length < 30) kb.push([B(texts.buttonLabel(t, today, names), `t:v:${t.id}`)]);
     }
     if (reminders.length) {
       const rl = reminders.slice(0, 8).map((r) => `${r.at.slice(8, 10)}.${r.at.slice(5, 7)} ${r.at.slice(11, 16)} — ${r.text}`);
@@ -361,7 +363,7 @@ export class App {
     if (!sug.length) return S("Свободных задач, готовых к старту, нет.", MENU);
     let text = `<b>Свободные задачи (${sug.length})</b> — по важности. Открой и нажми «Взять».`;
     if (blocked.length) text += `\n<i>Ещё ${blocked.length} ждут завершения других задач.</i>`;
-    return S(text, [...this.taskButtons(sug.map((s) => s.task)), [B("Меню", "go:menu")]]);
+    return S(text, [...await this.taskButtons(sug.map((s) => s.task)), [B("Меню", "go:menu")]]);
   }
 
   async scrStages(): Promise<Screen> {
@@ -382,7 +384,7 @@ export class App {
     ts.sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || (a.due || "9999").localeCompare(b.due || "9999")
       || (PRIORITIES[b.priority] ?? 2) - (PRIORITIES[a.priority] ?? 2));
     const [d, n, p] = logic.progress(ts);
-    const kb = this.taskButtons((showAll ? ts : ts.filter((t) => !isDone(t))).slice(0, 50));
+    const kb = await this.taskButtons((showAll ? ts : ts.filter((t) => !isDone(t))).slice(0, 50));
     if (!showAll && d) kb.push([B(`Показать выполненные (${d})`, `s:${idx}:all`)]);
     kb.push([B("← Этапы", "go:tasks"), B("Меню", "go:menu")]);
     return S(`<b>${esc(name)}</b>\n${logic.bar(p)} ${d}/${n}`, kb);
@@ -408,15 +410,16 @@ export class App {
     const linked = logic.milestoneTasks(x, tasks).sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || (a.due || "9999").localeCompare(b.due || "9999"));
     let text = texts.milestoneLine(x, tasks, this.today());
     if (x.criterion) text += `\n\n<b>Критерий:</b> ${esc(x.criterion)}`;
-    return S(text, [...this.taskButtons(linked.slice(0, 40)), [U("Открыть в Notion", notionUrl(x.id))], [B("← Вехи", "go:ms")]]);
+    return S(text, [...await this.taskButtons(linked.slice(0, 40)), [U("Открыть в Notion", notionUrl(x.id))], [B("← Вехи", "go:ms")]]);
   }
 
   async scrSearch(query: string): Promise<Screen> {
     const hits = logic.search(query, await this.st.tasks(), await this.st.ideas());
     if (!hits.length) return S(`По запросу «${esc(query)}» ничего не нашёл.`, MENU);
     const today = this.today();
+    const names = await texts.Names.load(this.st);
     const kb = hits.map((h) => h.kind === "task"
-      ? [B(texts.buttonLabel(h.obj, today), `t:v:${h.obj.id}`)]
+      ? [B(texts.buttonLabel(h.obj, today, names), `t:v:${h.obj.id}`)]
       : [B(`💡 ${texts.cut(h.obj.title, 42)}`, `i:v:${h.obj.id}`)]);
     return S(`Нашёл по запросу «${esc(query)}»:`, [...kb, [B("Меню", "go:menu")]]);
   }
@@ -620,7 +623,8 @@ export class App {
     let hit = logic.search(text, mine, [], 3).map((h) => h.obj as Task).filter((t) => mine.includes(t));
     if (!hit.length) { const w = mine.filter((t) => t.status === "В работе"); if (w.length === 1) hit = w; }
     if (!hit.length) {
-      return R(S("Не понял, к какой задаче это относится. Открой задачу и нажми «📝 Заметка».", mine.slice(0, 10).map((t) => [B(texts.buttonLabel(t, this.today()), `t:note:${t.id}`)])));
+      const names = await texts.Names.load(this.st);
+      return R(S("Не понял, к какой задаче это относится. Открой задачу и нажми «📝 Заметка».", mine.slice(0, 10).map((t) => [B(texts.buttonLabel(t, this.today(), names), `t:note:${t.id}`)])));
     }
     for (const t of hit) await this.svc.note(t, m, `Чек-ин: ${text.slice(0, 500)}`);
     return R(S(`Записал в журнал: ${hit.map((t) => "«" + esc(t.title) + "»").join(", ")}.`, MENU));
@@ -735,6 +739,7 @@ export class App {
   async scrTeam(m: Member): Promise<Screen> {
     const tasks = await this.st.tasks();
     const notion = new Map((await this.st.notionUsers()).map((u) => [u.id, u.name]));
+    const names = await texts.Names.load(this.st);
     const lines = ["<b>Команда</b>", ""];
     const kb: Btn[][] = [];
     for (const x of await this.st.members()) {
@@ -749,10 +754,11 @@ export class App {
       const od = logic.overdue(active, this.today()).length;
       const done = tasks.filter((t) => t.assignee_tg === x.tg_id && isDone(t)).length;
       const link = x.notion_user_id ? notion.get(x.notion_user_id) || "" : "";
-      lines.push(`${x.admin ? "⭐ " : ""}<b>${esc(x.name)}</b>${x.username ? " @" + esc(x.username) : ""}\n`
+      lines.push(`${names.colorOf(x.tg_id)} ${x.admin ? "⭐ " : ""}<b>${esc(x.name)}</b>${x.username ? " @" + esc(x.username) : ""}\n`
         + `    в работе ${active.length}, готово ${done}${od ? `, просрочено ${od}` : ""}\n    Notion: ${link ? esc(link) : "не привязан"}`);
       if (m.admin || x.tg_id === m.tg_id) kb.push([B(`🔗 Notion для ${x.name}`, `m:link:${x.tg_id}`)]);
     }
+    lines.push("", "<b>Маркеры задач:</b> " + esc(names.legend()));
     lines.push("", "Общий чат для сводок: " + ((await this.st.kvGet("group_chat")) ? "привязан" : "не привязан — /bindchat в чате"));
     return S(lines.join("\n"), [...kb, [B("Меню", "go:menu")]]);
   }

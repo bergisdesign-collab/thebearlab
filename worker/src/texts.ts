@@ -24,18 +24,67 @@ export function cut(text: string, n: number): string {
 
 export const clip = (text: string): string => (text.length <= MAX_LEN ? text : text.slice(0, MAX_LEN - 20).trimEnd() + "\n…");
 
-/** Resolves assignees to display names (Telegram member first, then Notion user). */
+// Each person has a colour marker; ⚪ — free task, 🔴 — overdue, ✅ — done.
+export const PALETTE = ["🟢", "🟣", "🟠", "🔵", "🟡", "🟤", "⚫"];
+
+/** Stable colour per person, kept in kv "colors" so it never changes when someone joins. */
+export async function loadColors(st: Storage, members: Member[], notionUsers: { id: string; type?: string }[]): Promise<Record<string, string>> {
+  const colors = { ...((await st.kvGet<Record<string, string>>("colors")) || {}) };
+  const linked = new Set(members.map((m) => m.notion_user_id).filter(Boolean));
+  const keys = [
+    ...members.filter((m) => m.approved).map((m) => `tg:${m.tg_id}`),
+    ...notionUsers.filter((u) => u.type !== "bot" && !linked.has(u.id)).map((u) => `n:${u.id}`),
+  ];
+  let changed = false;
+  for (const k of keys) {
+    if (colors[k]) continue;
+    const used = new Set(Object.values(colors));
+    colors[k] = PALETTE.find((c) => !used.has(c)) || PALETTE[Object.keys(colors).length % PALETTE.length];
+    changed = true;
+  }
+  if (changed) await st.kvSet("colors", colors);
+  return colors;
+}
+
+/** Resolves assignees to display names (Telegram member first, then Notion user) and colour markers. */
 export class Names {
   members: Map<number, Member>;
   notion: Map<string, string>;
+  colors: Record<string, string>;
+  byNotion: Map<string, number>;
 
-  constructor(members: Member[], notionUsers: { id: string; name: string }[]) {
+  constructor(members: Member[], notionUsers: { id: string; name: string }[], colors: Record<string, string> = {}) {
     this.members = new Map(members.map((m) => [m.tg_id, m]));
     this.notion = new Map(notionUsers.map((u) => [u.id, u.name || ""]));
+    this.colors = colors;
+    this.byNotion = new Map(members.filter((m) => m.notion_user_id).map((m) => [m.notion_user_id!, m.tg_id]));
   }
 
   static async load(st: Storage): Promise<Names> {
-    return new Names(await st.members(), await st.notionUsers());
+    const members = await st.members();
+    const users = await st.notionUsers();
+    return new Names(members, users, await loadColors(st, members, users as { id: string; type?: string }[]));
+  }
+
+  /** Colour of a person (Telegram id), ⚪ if unknown. */
+  colorOf(tgId: number): string { return this.colors[`tg:${tgId}`] || "⚪"; }
+
+  /** ✅ done, 🔴 overdue, ⚪ free, otherwise the assignee's colour. */
+  marker(t: Task, today: string): string {
+    if (isDone(t)) return "✅";
+    if (t.due && t.due < today) return "🔴";
+    const tg = t.assignee_tg || (t.assignee_notion ? this.byNotion.get(t.assignee_notion) : undefined);
+    if (tg) return this.colors[`tg:${tg}`] || "⚪";
+    if (t.assignee_notion) return this.colors[`n:${t.assignee_notion}`] || "⚪";
+    return "⚪";
+  }
+
+  /** «🟢 Сергей · 🟣 Аня» */
+  legend(): string {
+    const out: string[] = [];
+    for (const m of this.members.values()) if (m.approved && this.colors[`tg:${m.tg_id}`]) out.push(`${this.colors[`tg:${m.tg_id}`]} ${m.name}`);
+    for (const [id, name] of this.notion) if (this.colors[`n:${id}`] && name) out.push(`${this.colors[`n:${id}`]} ${name}`);
+    return [...out, "⚪ свободна", "🔴 просрочена"].join(" · ");
   }
 
   of(t: Task): string {
@@ -56,7 +105,8 @@ export function dueLabel(t: Task, today: string): string {
 }
 
 export function taskLine(t: Task, names: Names, today: string, showWho = true): string {
-  const parts = [`${STATUS_ICON[t.status] || "⚪"} ${TYPE_ICON[t.type] || ""}${esc(t.title)}`];
+  const parts = [`${names.marker(t, today)} ${TYPE_ICON[t.type] || ""}${esc(t.title)}`];
+  if (t.status === "На проверке") parts.push("на проверке");
   const dl = dueLabel(t, today);
   if (dl) parts.push(dl);
   if (showWho) {
@@ -66,10 +116,11 @@ export function taskLine(t: Task, names: Names, today: string, showWho = true): 
   return parts.join(" · ");
 }
 
-export function buttonLabel(t: Task, today: string): string {
+export function buttonLabel(t: Task, today: string, names?: Names): string {
   let dl = dueLabel(t, today);
-  if (dl.startsWith("⏰")) dl = "⏰";
-  const label = `${STATUS_ICON[t.status] || "⚪"} ${cut(t.title, 38)}`;
+  if (dl.startsWith("⏰")) dl = shortDate(t.due);
+  const mark = names ? names.marker(t, today) : isDone(t) ? "✅" : t.due && t.due < today ? "🔴" : t.assignee_tg || t.assignee_notion ? STATUS_ICON[t.status] || "⚪" : "⚪";
+  const label = `${mark} ${cut(t.title, t.status === "На проверке" ? 30 : 38)}${t.status === "На проверке" ? " · проверка" : ""}`;
   return dl ? `${label} · ${dl}` : label;
 }
 
@@ -90,7 +141,7 @@ export async function taskCard(t: Task, st: Storage, today: string, events: Even
     lines.push(`Срок: ${t.start ? shortDate(t.start) + "–" : ""}${shortDate(t.due)}${rel}`);
   }
   const who = names.of(t);
-  lines.push(`Исполнитель: ${who ? esc(who) : "свободна — можно взять"}`);
+  lines.push(`Исполнитель: ${names.marker(t, today)} ${who ? esc(who) : "свободна — можно взять"}`);
   const ml = t.milestones.filter((i) => ms.has(i)).map((i) => `«${esc(ms.get(i)!.title)}» ${shortDate(ms.get(i)!.date)}`);
   if (ml.length) lines.push("Веха: " + ml.join(", "));
   const deps = t.depends_on.map((d) => byId.get(d)).filter((x): x is Task => !!x);
