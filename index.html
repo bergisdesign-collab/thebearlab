@@ -206,6 +206,34 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
   .sheet .shot img{max-height:240px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== Детская пошаговая сборка ===== */
+body.guided .rail,body.guided .sheetwrap,body.guided header.top{display:none!important}
+body.guided .app{grid-template-columns:1fr!important;grid-template-rows:1fr!important}
+body.guided .stage{grid-column:1/-1!important;grid-row:1/-1!important}
+.kid{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;pointer-events:none}
+body.guided .kid{display:flex}
+.kid .ktop,.kid .kbot{pointer-events:auto}
+.kid .mid{flex:1;pointer-events:none}
+.kid .ktop{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 16px 10px}
+.kid .dots{display:flex;gap:7px;margin:0 auto}
+.kid .dots i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.25)}
+.kid .dots i.on{background:var(--sun,#ffd84d);transform:scale(1.25)}
+.kid .dots i.done{background:var(--sun,#ffd84d);opacity:.45}
+.kid .pgate,.kid .adult{background:rgba(0,0,0,.4);color:#fff;border:0;border-radius:12px;padding:8px 12px;font-size:13px;font-weight:700}
+.kid .kbot{padding:0 14px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+.kid .ktitle{text-align:center;color:#fff;font-size:21px;font-weight:800;text-shadow:0 2px 14px rgba(0,0,0,.7)}
+.kid .tray{display:flex;gap:10px;overflow-x:auto;padding:4px 2px;scrollbar-width:none}
+.kid .tray::-webkit-scrollbar{display:none}
+.kid .tile{flex:0 0 auto;min-width:76px;min-height:76px;border-radius:20px;border:3px solid transparent;background:rgba(255,255,255,.14);color:#fff;font-size:15px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 14px}
+.kid .tile .sw{width:42px;height:42px;border-radius:50%;box-shadow:inset 0 0 0 2px rgba(255,255,255,.5)}
+.kid .tile .em{font-size:32px;line-height:1}
+.kid .tile[aria-pressed=true]{border-color:var(--sun,#ffd84d);background:rgba(255,255,255,.24)}
+.kid .next{width:100%;min-height:78px;border:0;border-radius:22px;background:linear-gradient(180deg,#7bd88f,#49b86a);color:#09210f;font-size:23px;font-weight:900;box-shadow:0 10px 26px rgba(0,0,0,.4)}
+.kid .back{align-self:center;background:none;border:0;color:#fff;opacity:.85;font-size:15px;font-weight:700;padding:4px}
+.kid-float{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:40;background:var(--sun,#ffd84d);color:#222;border:0;border-radius:14px;padding:10px 14px;font-weight:800;display:none}
+body:not(.guided) .kid-float{display:block}
+body.guided .ov .tools,body.guided .ov .badge,body.guided .ov .want,body.guided #done,body.guided .sheet-add,body.guided #open-cart{display:none!important}
 </style>
 <link rel="stylesheet" href="sandbox/workshop.css">
 <link rel="stylesheet" href="sandbox/order-ui.css">
@@ -1170,6 +1198,52 @@ paintAll();makeSets();renderRail();resize();build();focusCam(false);if(renderer 
 document.getElementById('loading').remove();
 if (renderer) loop();
 try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&window.isSecureContext&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
+/* ===== Детская пошаговая сборка (поверх движка) ===== */
+(function(){
+  const modalEl=document.getElementById('modal');
+  const PALK=['#9b6a43','#c98b4f','#e8c39e','#ffffff','#2b2b2e','#ff8fb8','#b48cff','#3b5bdb','#7cc4ff','#5fd38d','#f6e21b','#e53935'];
+  const EMOJI={'Радость':'\ud83d\ude04','Спокойствие':'\ud83d\ude42','Грусть':'\ud83d\ude41','Удивление':'\ud83d\ude2e','Злость':'\ud83d\ude20','Хитрость':'\ud83d\ude0f'};
+  function applyEmo(v){Object.assign(cfg,v);scheduleRebuild();commit();updPrice();save()}
+  const STEPS=[
+    {t:'Выбери цвет мишки',opts:PALK.map(h=>({sw:h,on:()=>cfg.main===h,go:()=>set('main',h,{render:false})}))},
+    {t:'Какое тело?',opts:OPT.body.map(o=>({lb:o[1],on:()=>cfg.body===o[0],go:()=>set('body',o[0],{render:false})}))},
+    {t:'Голова',opts:OPT.headShape.map(o=>({lb:o[1],on:()=>cfg.headShape===o[0],go:()=>set('headShape',o[0],{render:false})}))},
+    {t:'Ушки',opts:OPT.ears.slice(0,4).map(o=>({lb:o[1],on:()=>cfg.ears===o[0],go:()=>set('ears',o[0],{render:false})}))},
+    {t:'Настроение',opts:EMO.map(e=>({em:EMOJI[e[0]]||'\ud83d\ude42',lb:e[0],on:()=>Object.keys(e[1]).every(k=>cfg[k]===e[1][k]),go:()=>applyEmo(e[1])}))},
+    {t:'Глазки',opts:OPT.eyes.slice(0,4).map(o=>({lb:o[1],on:()=>cfg.eyes===o[0],go:()=>set('eyes',o[0],{render:false})}))},
+    {t:'Оденем мишку',opts:OUTFITS.map(o=>({lb:o.name,on:()=>sameClothes(cfg.clothes,o.clothes),go:()=>set('clothes',o.clothes.slice(),{render:false})}))}
+  ];
+  let step=0;
+  const dots=el('div',{class:'dots'}),title=el('div',{class:'ktitle'}),tray=el('div',{class:'tray'});
+  const nextBtn=el('button',{class:'next'}),backBtn=el('button',{class:'back'},'\u2190 назад');
+  const adult=el('button',{class:'adult'},'взрослый режим');
+  const top=el('div',{class:'ktop'},[el('button',{class:'pgate',onclick:()=>say('Это вход для взрослого.')},'\u2699'),dots,adult]);
+  const bot=el('div',{class:'kbot'},[title,tray,nextBtn,backBtn]);
+  document.body.append(el('div',{class:'kid'},[top,el('div',{class:'mid'}),bot]));
+  document.body.append(el('button',{class:'kid-float',onclick:()=>enter()},'\ud83e\uddf8 детский режим'));
+  function renderDots(){dots.innerHTML='';STEPS.forEach((_,i)=>dots.append(el('i',{class:i===step?'on':(i<step?'done':'')})))}
+  function renderStep(){const s=STEPS[step];title.textContent=s.t;tray.innerHTML='';
+    s.opts.forEach(o=>{const tl=el('button',{class:'tile',onclick:()=>{o.go();bounce=1;renderStep()}});
+      if(o.sw)tl.append(el('span',{class:'sw',style:'background:'+o.sw}));
+      if(o.em)tl.append(el('span',{class:'em'},o.em));
+      if(o.lb)tl.append(el('span',{},o.lb));
+      tl.setAttribute('aria-pressed',String(!!o.on()));tray.append(tl)});
+    nextBtn.textContent=step>=STEPS.length-1?'Готово \u2713':'Дальше \u2192';
+    backBtn.style.visibility=step>0?'visible':'hidden';renderDots();if(typeof focusCam==='function')focusCam()}
+  nextBtn.onclick=()=>{if(step<STEPS.length-1){step++;renderStep();say(['Класс!','Отлично!','Здорово!','Красота!'][step%4])}else finish()};
+  backBtn.onclick=()=>{if(step>0){step--;renderStep()}};
+  adult.onclick=()=>exit();
+  function enter(){step=0;document.body.classList.add('guided');renderStep();say('Привет! Давай соберём мишку.')}
+  function exit(){document.body.classList.remove('guided')}
+  function closeM(){if(modalEl)modalEl.hidden=true}
+  function finish(){openModal([el('h3',{},(cfg.name?('Мишка '+cfg.name):'Твой мишка')+' готов!'),
+    el('p',{class:'note'},'Покажи взрослому — он закажет такого же плюшевого мишку.'),
+    (typeof enc==='function')?el('div',{class:'code'},enc(cfg)):null,
+    el('div',{class:'acts'},[
+      el('button',{class:'btn go',onclick:()=>{closeM();exit();try{document.getElementById('done').click()}catch(e){}}},'Показать взрослому'),
+      el('button',{class:'btn g',onclick:()=>{closeM();step=0;renderStep()}},'Соберём заново')])])}
+  enter();
+})();
 })();
 </script>
 
