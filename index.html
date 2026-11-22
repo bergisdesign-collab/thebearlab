@@ -11,8 +11,9 @@ html,body{margin:0;height:100%;background:#15101f;overflow:hidden;font:16px/1.4 
 .hot.show{background:rgba(255,255,255,.08);outline:2px dashed rgba(255,255,255,.35)}
 #base{position:absolute;inset:0;z-index:2;background:transparent;border:0;cursor:pointer}
 .sel{position:absolute;z-index:4;border:4px solid #ffd54a;border-radius:18px;box-shadow:0 0 16px rgba(255,213,74,.6);pointer-events:none;transition:.15s}
-#map{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;background:rgba(0,0,0,.5);color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;backdrop-filter:blur(6px)}
-#hint{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;background:rgba(0,0,0,.4);color:#ffe9a8;border:0;border-radius:12px;padding:8px 12px;font-size:12px}
+#map{position:fixed;right:10px;top:calc(8px + env(safe-area-inset-top));z-index:30;background:rgba(0,0,0,.42);color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;backdrop-filter:blur(6px)}
+#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;background:rgba(0,0,0,.38);color:#ffe9a8;border:0;border-radius:12px;padding:6px 12px;font-size:12px;transition:opacity .4s;pointer-events:none}
+#hint.off{opacity:0}
 #grid{position:fixed;inset:0;z-index:50;background:#15101f;overflow:auto;padding:16px;display:none}
 #grid.on{display:block}
 #grid h2{color:#fff1dc;font-size:16px;margin:4px 0 14px}
@@ -61,7 +62,7 @@ function render(){
  const p=mk(PRIMARY);p.onclick=e=>{e.stopPropagation();if(f.open)location.href=f.open;else if(f.next)go(f.next)};hw.appendChild(p);
  (f.hot||[]).forEach(h=>{const b=mk(h);b.onclick=e=>{e.stopPropagation();if(h.to)go(h.to);else if(h.pick!=null){outfit=h.pick;drawSel()}};hw.appendChild(b)});
  drawSel();
- document.getElementById('hint').textContent = f.open?'открыть 3D →':(f.next?'тапни большую кнопку →':'назад ←');
+ var _h=document.getElementById('hint');_h.textContent=f.open?'открыть 3D →':(f.next?'тапни большую кнопку →':'назад ←');_h.classList.remove('off');clearTimeout(window._ht);window._ht=setTimeout(function(){_h.classList.add('off')},2600);
 }
 function mk(h){const b=document.createElement('button');b.className='hot';b.style.cssText=pos(h);return b}
 function drawSel(){const old=frame.querySelector('.sel');if(old)old.remove();const f=FLOW[cur]||{};if(!f.sel)return;const s=f.sel[outfit];if(!s)return;const d=document.createElement('div');d.className='sel';d.style.cssText=pos(s);frame.appendChild(d)}
