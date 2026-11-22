@@ -1,0 +1,73 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BearLab — болванка</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#15101f;overflow:hidden;font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#frame{position:relative;height:100%;aspect-ratio:542/966;max-width:100vw;background:#15101f;overflow:hidden}
+#frame img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none}
+.hot{position:absolute;border:0;background:transparent;cursor:pointer;z-index:5}
+.hot.show{background:rgba(255,255,255,.08);outline:2px dashed rgba(255,255,255,.35)}
+#base{position:absolute;inset:0;z-index:2;background:transparent;border:0;cursor:pointer}
+.sel{position:absolute;z-index:4;border:4px solid #ffd54a;border-radius:18px;box-shadow:0 0 16px rgba(255,213,74,.6);pointer-events:none;transition:.15s}
+#map{position:fixed;left:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;background:rgba(0,0,0,.5);color:#fff;border:0;border-radius:12px;padding:8px 12px;font-weight:700;font-size:13px;backdrop-filter:blur(6px)}
+#hint{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:30;background:rgba(0,0,0,.4);color:#ffe9a8;border:0;border-radius:12px;padding:8px 12px;font-size:12px}
+#grid{position:fixed;inset:0;z-index:50;background:#15101f;overflow:auto;padding:16px;display:none}
+#grid.on{display:block}
+#grid h2{color:#fff1dc;font-size:16px;margin:4px 0 14px}
+.gg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.gg figure{margin:0}
+.gg img{width:100%;border-radius:12px;display:block;border:2px solid transparent}
+.gg figcaption{color:#cbb8e0;font-size:11px;text-align:center;margin-top:4px}
+#gclose{position:fixed;right:14px;top:calc(10px + env(safe-area-inset-top));z-index:60;background:#ffd54a;border:0;border-radius:12px;padding:8px 14px;font-weight:800}
+.flash{animation:fl .25s}@keyframes fl{from{opacity:.4}to{opacity:1}}
+</style></head><body>
+<div id="stage"><div id="frame"><img id="shot" alt=""><div id="hotwrap"></div></div></div>
+<button id="map">⊞ карта</button>
+<button id="hint">тапни кнопку →</button>
+<section id="grid"><button id="gclose">✕</button><h2>Все экраны — нажми, чтобы перейти</h2><div class="gg" id="gg"></div></section>
+<script>
+const SC=[null,'01-home','02-studio','03-wardrobe','04-look','05-cart','06-delivery','07-confirmation','08-orders','09-assembly','10-share','11-world','12-match3','13-result'];
+const NAME={1:'Дом',2:'Мастерская',3:'Гардероб',4:'Мой мишка',5:'Корзина',6:'Доставка',7:'Заявка собрана',8:'Заявки',9:'Лист сборки',10:'Поделиться',11:'Мир',12:'Три в ряд',13:'Результат'};
+// back zone + primary(next) + extra hotspots; coords are % of frame {x,y,w,h,to}
+const BACK={x:2,y:2.5,w:17,h:7};
+const PRIMARY={x:6,y:86,w:88,h:11};
+const FLOW={
+ 1:{next:3, hot:[{x:4,y:72,w:28,h:10,to:3},{x:36,y:72,w:28,h:10,to:11},{x:68,y:72,w:28,h:10,to:12}]},
+ 2:{back:3, next:3},
+ 3:{back:1, next:4, sel:[{x:4,y:63,w:29,h:20,o:'База'},{x:35,y:63,w:29,h:20,o:'Худи'},{x:66,y:63,w:29,h:20,o:'Сарафан'}], hot:[{x:4,y:63,w:29,h:20,pick:0},{x:35,y:63,w:29,h:20,pick:1},{x:66,y:63,w:29,h:20,pick:2}]},
+ 4:{back:3, next:5, hot:[{x:6,y:71,w:40,h:8,to:3},{x:52,y:71,w:40,h:8,to:3},{x:30,y:76,w:40,h:7,to:10}]},
+ 5:{back:3, next:6},
+ 6:{back:5, next:7},
+ 7:{back:1, next:9},
+ 8:{back:1, next:9},
+ 9:{back:8, next:1},
+ 10:{back:4, next:4},
+ 11:{back:1, next:2, hot:[{x:8,y:40,w:40,h:22,to:2},{x:52,y:40,w:40,h:22,to:12}]},
+ 12:{back:11, next:13},
+ 13:{back:1, next:12}
+};
+let cur=1, outfit=1;
+const frame=document.getElementById('frame'),shot=document.getElementById('shot'),hw=document.getElementById('hotwrap');
+function pos(h){return 'left:'+h.x+'%;top:'+h.y+'%;width:'+h.w+'%;height:'+h.h+'%'}
+function go(n){cur=n;render()}
+function render(){
+ shot.src='screens/'+SC[cur]+'.png';shot.classList.remove('flash');void shot.offsetWidth;shot.classList.add('flash');
+ hw.innerHTML='';const f=FLOW[cur]||{};
+ const base=document.createElement('button');base.id='base';base.onclick=()=>{if(f.next)go(f.next)};hw.appendChild(base);
+ if(f.back){const b=mk(BACK);b.onclick=e=>{e.stopPropagation();go(f.back)};hw.appendChild(b)}
+ // primary visible big button also advances (on top of base, same effect)
+ const p=mk(PRIMARY);p.onclick=e=>{e.stopPropagation();if(f.next)go(f.next)};hw.appendChild(p);
+ (f.hot||[]).forEach(h=>{const b=mk(h);b.onclick=e=>{e.stopPropagation();if(h.to)go(h.to);else if(h.pick!=null){outfit=h.pick;drawSel()}};hw.appendChild(b)});
+ drawSel();
+ document.getElementById('hint').textContent = f.next? 'тапни большую кнопку →' : 'назад ←';
+}
+function mk(h){const b=document.createElement('button');b.className='hot';b.style.cssText=pos(h);return b}
+function drawSel(){const old=frame.querySelector('.sel');if(old)old.remove();const f=FLOW[cur]||{};if(!f.sel)return;const s=f.sel[outfit];if(!s)return;const d=document.createElement('div');d.className='sel';d.style.cssText=pos(s);frame.appendChild(d)}
+// grid
+const gg=document.getElementById('gg');for(let i=1;i<=13;i++){const fig=document.createElement('figure');fig.innerHTML='<img src="screens/'+SC[i]+'.png"><figcaption>'+i+'. '+NAME[i]+'</figcaption>';fig.onclick=()=>{document.getElementById('grid').classList.remove('on');go(i)};gg.appendChild(fig)}
+document.getElementById('map').onclick=()=>document.getElementById('grid').classList.add('on');
+document.getElementById('gclose').onclick=()=>document.getElementById('grid').classList.remove('on');
+render();
+</script></body></html>
