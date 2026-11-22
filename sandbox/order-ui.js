@@ -178,7 +178,8 @@
       avatar(cfg),
       node('div', 'bo-item-name', [
         node('strong', '', nameOf(line)),
-        node('p', 'bo-muted', cfg.size + ' см · ' + rubles.format(line.unitPrice) + ' за шт.')
+        node('p', 'bo-muted', cfg.size + ' см · ' + rubles.format(line.unitPrice) + ' за шт.'),
+        ...(line.clothing.length ? [node('small', 'bo-muted', line.clothing.map(item => item.label).join(' + '))] : [])
       ])
     ]);
   }
@@ -280,7 +281,7 @@
       if (!sampleOrder) {
         const item = options.getExample();
         const empty = {version: 1, cart: [], orders: []};
-        const cart = model.addItem(empty, item.config, item.price);
+        const cart = model.addItem(empty, item.config, item.price, options.getClothingCatalog?.() || []);
         sampleOrder = model.checkout(cart, model.deliveries[0].id).orders[0];
       }
       selectedOrder = sampleOrder.id;
@@ -362,6 +363,24 @@
     return wrap;
   }
 
+  function pickingList(line) {
+    const section = node('section', 'bo-section');
+    const list = node('ol', 'bo-assembly');
+    const extras = line.clothing.reduce((sum,item) => sum + item.price,0);
+    list.append(node('li', '', [node('b', '', 'Основа мишки'),
+      node('p', 'bo-muted', line.cfg.size + ' см · ' + line.quantity + ' шт. · ' +
+        rubles.format(line.unitPrice - extras) + ' за шт. с настройками и аксессуарами')]));
+    const slotNames = {top:'верх',bottom:'низ',feet:'обувь',wrist:'запястье'};
+    line.clothing.forEach(item => list.append(node('li', '', [
+      node('div','bo-part-top',[node('b','',item.label),node('code','',item.sku)]),
+      node('p','bo-muted',slotNames[item.slot] + ' (' + item.slot + ') · ' +
+        line.quantity + ' шт. · ' + rubles.format(item.price) + ' за шт.'),
+      physicalStatus('pending')
+    ])));
+    section.append(node('h4','','Изделия для комплектации'),list);
+    return section;
+  }
+
   function drawDetail(order) {
     const method = model.deliveries.find(item => item.id === order.deliveryId);
     body.append(node('div', 'bo-meta', [
@@ -373,7 +392,7 @@
     order.items.forEach(line => {
       const item = node('section', 'bo-detail-item', [
         node('div', 'bo-detail-title', [summary(line), node('b', '', line.quantity + ' шт.')]),
-        assemblyList(line)
+        pickingList(line), assemblyList(line)
       ]);
       body.append(item);
     });
@@ -397,7 +416,7 @@
     openProduction: () => go('production'),
     add: (config, price) => {
       if (!dialog) init();
-      return change(current => model.addItem(current, config, price), () => go('cart', 'Мишка добавлен в корзину.'));
+      return change(current => model.addItem(current, config, price, options.getClothingCatalog?.() || []), () => go('cart', 'Мишка добавлен в корзину.'));
     }
   });
 })();

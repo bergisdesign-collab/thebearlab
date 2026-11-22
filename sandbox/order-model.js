@@ -27,7 +27,7 @@
     glow: false, eyeSpots: false, mouth: 'line', emotion: .45, browTilt: 0,
     brows: false, blush: false, noseType: 'oval', body: 'normal', bodyWidth: .5,
     belly: true, tail: true, pose: 'sit', armLen: .5, armThick: .5, armPose: .35,
-    claws: false, legLen: .5, legThick: .5, acc: [], glbTint: 0, model: 'teddy', outfit: 'base'
+    claws: false, legLen: .5, legThick: .5, acc: [], glbTint: 0, model: 'teddy', outfit: 'base', clothes: []
   };
   const labels = {
     size: {'20': '20 см', '30': '30 см', '45': '45 см'},
@@ -51,6 +51,8 @@
   };
   const attachmentGroup = {glasses:'eyes', patch:'eyes', crown:'head', pirate:'head', cap:'head', helmet:'head',
     headphones:'ears', chain:'neck', bowtie:'neck', scarf:'neck', cape:'back', watch:'wrist', plaster:'face', guitar:'hands'};
+  const clothingSlots = ['top','bottom','feet','wrist'];
+  const clothingId = id => typeof id === 'string' && /^[a-z][a-z0-9_-]{0,47}$/i.test(id);
   const colors = new Set(['main','accent','earColor','limbColor','pads','nose','tip','patternColor','iris']);
   const has = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
   const plain = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -74,6 +76,8 @@
       if (key === 'acc') {
         ok = Array.isArray(value) && value.length <= 10 && value.every(id => typeof id === 'string' && has(accessories,id));
         if (ok) ok = new Set(value.map(id => attachmentGroup[id])).size === value.length;
+      } else if (key === 'clothes') {
+        ok = Array.isArray(value) && value.length <= clothingSlots.length && value.every(clothingId) && new Set(value).size === value.length;
       } else if (key === 'name') {
         ok = typeof value === 'string' && [...value].length <= 10 && !/[\u0000-\u001f\u007f]/.test(value);
       } else if (has(labels,key)) {
@@ -88,9 +92,33 @@
         ok = typeof value === 'boolean';
       }
       requireValue(ok, 'Недопустимая настройка мишки: ' + key);
-      cfg[key] = key === 'acc' ? [...value].sort() : value;
+      cfg[key] = key === 'acc' || key === 'clothes' ? [...value].sort() : value;
     }
     return cfg;
+  }
+  // Catalog records travel with the order. A later edit in CLOTHES must not change an old manufacturing sheet.
+  function clothingSnapshot(ids, catalog, unitPrice) {
+    requireValue(Array.isArray(catalog),'Некорректный каталог одежды.');
+    const slotsUsed = new Set();
+    const skusUsed = new Set();
+    const picked = ids.map(id => {
+      const entry = catalog.find(item => plain(item) && item.id === id);
+      requireValue(entry,'В каталоге отсутствует выбранный предмет одежды: ' + id);
+      const {slot, sku, price, color, label} = entry;
+      requireValue(clothingSlots.includes(slot) && !slotsUsed.has(slot),'Два изделия в одном слоте одежды или неизвестный слот.');
+      requireValue(typeof sku === 'string' && new RegExp('^CL-' + slot.toUpperCase() + '-[0-9]{3}$').test(sku) &&
+        !skusUsed.has(sku),'Некорректный артикул одежды.');
+      requireValue(typeof label === 'string' && label.trim() && label.length <= 100 &&
+        !/[\u0000-\u001f\u007f]/.test(label),'Некорректное название одежды.');
+      requireValue((typeof color === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(color)) ||
+        (Number.isSafeInteger(color) && color >= 0 && color <= 0xffffff),'Некорректный цвет одежды.');
+      checkPrice(price);
+      slotsUsed.add(slot);
+      skusUsed.add(sku);
+      return {id,slot,sku,price,color,label};
+    });
+    requireValue(picked.reduce((sum,item) => sum + item.price,0) <= unitPrice,'Одежда дороже общей суммы комплекта.');
+    return picked.sort((a,b) => clothingSlots.indexOf(a.slot) - clothingSlots.indexOf(b.slot));
   }
   const slots = [
     ['COLOR','Цвет и плюш',null,null,'MAT'], ['BODY','Туловище','C',null,null],
@@ -102,7 +130,7 @@
     ['OUTFIT','Комплект одежды','C','BODY','WEAR']
   ];
   const percent = value => Math.round(value * 100) + '%';
-  function describe(source) {
+  function describe(source, clothing = []) {
     const cfg = normalizeConfig(source);
     const label = key => labels[key][cfg[key]];
     const pick = keys => Object.fromEntries(keys.map(k => [k,cfg[k]]));
@@ -129,10 +157,15 @@
       // Keep the original no-outfit row byte-compatible with exports from before the selector existed.
       OUTFIT: [label('outfit'), 'Аксессуары перечислены отдельно.', {outfit:cfg.outfit === 'base' ? null : cfg.outfit}]
     };
+    if (cfg.clothes.length) {
+      const items = clothingSnapshot(cfg.clothes,clothing,Infinity);
+      rows.OUTFIT = [items.map(item => item.label).join(' + '), 'Одежда и обувь комплектуются отдельно от тела.',
+        {clothes:items.map(item => item.id)}];
+    }
     return slots.map(([slot, name, side, parent, joint], index) => {
       const [variant, description, attributes] = rows[slot.split('_')[0]];
       return {step:'ASM-' + String(index+1).padStart(2,'0'), slot, label:name, side, parent, joint, variant,
-        description, attributes:{...attributes}, physical:slot === 'OUTFIT' && cfg.outfit === 'base' ? 'none' : 'pending', sku:null};
+        description, attributes:{...attributes}, physical:slot === 'OUTFIT' && cfg.outfit === 'base' && !cfg.clothes.length ? 'none' : 'pending', sku:null};
     });
   }
   function layers(cfg) {
@@ -149,15 +182,15 @@
   function checkPrice(value) {
     requireValue(Number.isSafeInteger(value) && value >= 0 && value <= 1000000, 'Некорректная демонстрационная цена.');
   }
-  function addItem(state, source, unitPrice) {
+  function addItem(state, source, unitPrice, clothingCatalog = []) {
     const cfg = normalizeConfig(source);
     if (cfg.model === 'custom') throw new Error('Для заявки выберите встроенную модель: локальный 3D-файл нельзя передать в комплекте.');
     checkPrice(unitPrice);
-    const key = JSON.stringify(cfg);
-    const same = state.cart.find(line => line.unitPrice === unitPrice && JSON.stringify(line.cfg) === key);
+    const clothing = clothingSnapshot(cfg.clothes,clothingCatalog,unitPrice);
+    const same = state.cart.find(line => line.unitPrice === unitPrice && sameJson(line.cfg,cfg) && sameJson(line.clothing,clothing));
     if (same) return setQuantity(state,same.id,same.quantity+1);
     requireValue(state.cart.length < maxLines, 'В корзине уже ' + maxLines + ' разных комплектов.');
-    const line = {id:makeId('item'), cfg, quantity:1, unitPrice};
+    const line = {id:makeId('item'), cfg, quantity:1, unitPrice, clothing};
     return {...state, cart:[...state.cart,line]};
   }
   function setQuantity(state, lineId, quantity) {
@@ -172,7 +205,8 @@
   }
   function lineSnapshot(line) {
     const cfg = normalizeConfig(line.cfg);
-    return {...line, cfg, assembly:describe(cfg), accessories:layers(cfg)};
+    const clothing = clothingSnapshot(cfg.clothes,line.clothing || [],line.unitPrice);
+    return {...line, cfg, clothing, assembly:describe(cfg,clothing), accessories:layers(cfg)};
   }
   function createOrder(id, createdAt, deliveryId, cart) {
     const items = cart.map(lineSnapshot);
@@ -191,7 +225,7 @@
   }
   function checkLines(lines, withDerived) {
     requireValue(Array.isArray(lines) && lines.length <= maxLines, 'Некорректное число комплектов.');
-    const allowed = ['id','cfg','quantity','unitPrice'];
+    const allowed = ['id','cfg','quantity','unitPrice','clothing'];
     if (withDerived) allowed.push('assembly','accessories');
     const ids = new Set();
     return lines.map(line => {
@@ -203,7 +237,11 @@
       checkPrice(line.unitPrice);
       const cfg = normalizeConfig(line.cfg);
       requireValue(cfg.model !== 'custom','Локальная 3D-модель не поддерживается в файле заявки.');
-      return {id:line.id, cfg, quantity:line.quantity, unitPrice:line.unitPrice};
+      const rawClothing = has(line,'clothing') ? line.clothing : [];
+      requireValue(Array.isArray(rawClothing) && rawClothing.length === cfg.clothes.length,'Снимок одежды не совпадает с выбранными изделиями.');
+      rawClothing.forEach(item => assertKeys(item,['id','label','slot','sku','price','color']));
+      const clothing = clothingSnapshot(cfg.clothes,rawClothing,line.unitPrice);
+      return {id:line.id, cfg, quantity:line.quantity, unitPrice:line.unitPrice, clothing};
     });
   }
   function readOrder(raw, withDerived) {
@@ -269,7 +307,7 @@
   function writeState(state, storage = globalThis.localStorage) {
     // Persist source snapshots compactly. Never refresh their price or config from the active editor.
     const orders = state.orders.map(({id,createdAt,catalogVersion,deliveryId,items}) => ({
-      id,createdAt,catalogVersion,deliveryId,items:items.map(({id,cfg,quantity,unitPrice}) => ({id,cfg,quantity,unitPrice}))
+      id,createdAt,catalogVersion,deliveryId,items:items.map(({id,cfg,quantity,unitPrice,clothing}) => ({id,cfg,quantity,unitPrice,clothing}))
     }));
     storage.setItem(storageKey,JSON.stringify({version,cart:state.cart,orders}));
   }

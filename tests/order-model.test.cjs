@@ -118,3 +118,48 @@ test('garment references keep separate lines, physical parity and the existing v
   store.setItem(orders.storageKey,JSON.stringify(stored));
   assert.deepEqual(orders.readState(store),old);
 });
+test('Claude clothing contract snapshots a body and selected garments without charging twice', () => {
+  const catalog = [
+    {id:'hoodie', label:'Худи', slot:'top', sku:'CL-TOP-001', price:420, color:'#123456'},
+    {id:'sneakers', label:'Кеды', slot:'feet', sku:'CL-FEET-001', price:210, color:'#eeeeee'},
+    {id:'sundress', label:'Сарафан', slot:'top', sku:'CL-TOP-002', price:350, color:'#de4455'},
+    {id:'boots', label:'Ботинки', slot:'feet', sku:'CL-FEET-002', price:230, color:'#353433'}
+  ];
+  const blank = orders.readState(memory());
+  assert.throws(() => orders.addItem(blank,{clothes:['unknown']},1000,catalog));
+  assert.throws(() => orders.addItem(blank,{clothes:['hoodie','sundress']},5000,catalog));
+  assert.throws(() => orders.addItem(blank,{clothes:['hoodie']},50,catalog));
+  assert.throws(() => orders.addItem(blank,{clothes:['hoodie']},5000));
+  let cart = orders.addItem(blank,{clothes:['sneakers','hoodie'],acc:['watch']},3630,catalog);
+  cart = orders.addItem(cart,{clothes:['hoodie','sneakers'],acc:['watch']},3630,catalog);
+  assert.equal(cart.cart.length,1);
+  assert.deepEqual(cart.cart[0].clothing.map(row => row.sku),['CL-TOP-001','CL-FEET-001']);
+  catalog[0].price = 500;
+  catalog[0].label = 'Новая версия худи';
+  const changed = orders.addItem(cart,{clothes:['hoodie','sneakers'],acc:['watch']},3630,catalog);
+  assert.equal(changed.cart.length,2);
+  const storage = memory();
+  orders.writeState(cart,storage);
+  assert.deepEqual(orders.readState(storage),cart);
+  const state = orders.checkout(cart,'pickup');
+  const order = state.orders[0];
+  assert.equal(order.total,2 * 3630);
+  assert.equal(order.items[0].clothing[0].label,'Худи');
+  assert.equal(order.items[0].clothing[0].price,420);
+  assert.equal(order.items[0].assembly.at(-1).variant,'Худи + Кеды');
+  assert.equal(order.items[0].assembly.at(-1).physical,'pending');
+  assert.deepEqual(order.items[0].accessories.map(item=>item.id),['watch']);
+  const exported = orders.exportOrder(order);
+  assert.deepEqual(orders.importOrder(blank,exported).orders[0],order);
+  const invalid = JSON.parse(exported);
+  invalid.order.items[0].clothing.pop();
+  assert.throws(() => orders.importOrder(blank,JSON.stringify(invalid)));
+  orders.writeState(state,storage);
+  assert.deepEqual(orders.readState(storage),state);
+  const dress = orders.addItem(blank,{clothes:['sundress','boots']},3580,catalog);
+  assert.deepEqual(dress.cart[0].clothing.map(i=>i.label),['Сарафан','Ботинки']);
+  const old = JSON.parse(orders.exportOrder(orders.checkout(draft(),'pickup').orders[0]));
+  delete old.order.items[0].clothing;
+  delete old.order.items[0].cfg.clothes;
+  assert.deepEqual(orders.importOrder(blank,JSON.stringify(old)).orders[0].items[0].clothing,[]);
+});

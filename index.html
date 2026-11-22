@@ -344,6 +344,13 @@ function readConfig(raw) {
     if (value === undefined) continue;
     if (key === 'acc' && Array.isArray(value)) {
       for (const id of value) if (ACC.some(a => a.id === id)) c.acc = addAcc(c.acc, id);
+    } else if (key === 'clothes' && Array.isArray(value)) {
+      const chosen = new Map();
+      for (const id of value) {
+        const item = workshopClothing().find(item => item.id === id);
+        if (item) chosen.set(item.slot,id);
+      }
+      c.clothes = [...chosen.values()];
     } else if (key === 'name' && typeof value === 'string') c.name = value.slice(0, 10);
     else if (key === 'model') c.model = value === 'parts' ? 'parts' : 'teddy';
     else if (OPT[key]) {
@@ -1100,8 +1107,11 @@ document.getElementById('share').onclick=()=>{const code=enc(cfg);const msg=el('
   openModal([el('div',{class:'body'},[el('h3',{},'Код мишки'),msg,el('div',{class:'code',id:'dna'},code),el('div',{class:'acts'},[el('button',{class:'btn v',onclick:e=>{const b=e.currentTarget;const done=()=>b.textContent='Скопировано';if(navigator.clipboard)navigator.clipboard.writeText(code).then(done,()=>selectCode());else selectCode()}},'Скопировать')]),
     el('div',{class:'lbl',style:'font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px'},'Открыть чужой код'),inp,err,el('div',{class:'acts'},[el('button',{class:'btn go',onclick:()=>{try{const c=dec(inp.value);closeModal();applyCfg(c,'Мишка по коду загружен!')}catch(x){err.textContent='Код не подошёл. Проверь, что скопирован целиком.'}}},'Загрузить'),el('button',{class:'btn g',onclick:closeModal},'Закрыть')])])],true)};
 function selectCode(){const d=document.getElementById('dna');const r=document.createRange();r.selectNodeContents(d);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+// Empty until the wardrobe branch supplies the CLOTHES catalog in this scope.
+function workshopClothing() { return typeof CLOTHES === 'undefined' ? [] : CLOTHES; }
 const basketCount = document.getElementById('cart-count');
 BearOrderUI.init({
+  getClothingCatalog: workshopClothing,
   getExample() {
     const config = {...clone(DEF), name: 'Тоша', acc: ['scarf', 'watch']};
     return { config, price: total(config) };
@@ -1126,7 +1136,7 @@ document.getElementById('undo').onclick=()=>goHist(-1);document.getElementById('
 paintAll();makeSets();renderRail();resize();build();focusCam(false);if(renderer && cfg.model!=='parts')loadTeddy();addEventListener('resize',resize);renderPanel();updPrice();updHist();
 document.getElementById('loading').remove();
 if (renderer) loop();
-try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
+try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&window.isSecureContext&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
 })();
 </script>
 
