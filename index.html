@@ -282,7 +282,7 @@ const DEF={size:'30',name:'',furType:'fluffy',furLen:.5,furDensity:.55,main:'#9b
   pattern:'none',patternColor:'#f5efe6',headShape:'round',headSize:.5,muzzleSize:.5,ears:'round',earSize:.5,earPos:.5,
   eyes:'button',eyeSize:.5,eyeSpacing:.5,eyeHeight:.45,iris:'#3b5bdb',glow:false,eyeSpots:false,
   mouth:'line',emotion:.45,browTilt:0,brows:false,blush:false,noseType:'oval',
-  body:'normal',bodyWidth:.5,belly:true,tail:true,pose:'sit',armLen:.5,armThick:.5,armPose:.35,claws:false,legLen:.5,legThick:.5,acc:[],glbTint:0,model:'teddy'};
+  body:'normal',bodyWidth:.5,belly:true,tail:true,pose:'sit',armLen:.5,armThick:.5,armPose:.35,claws:false,legLen:.5,legThick:.5,acc:[],clothes:[],glbTint:0,model:'teddy'};
 const OPT={
   headShape:[['round','Круглая'],['wide','Широкая'],['oval','Вытянутая']],
   ears:[['round','Круглые',0],['pointy','Острые',0],['floppy','Висячие',190],['bunny','Зайчьи',190],['cyber','Кибер-уши',490]],
@@ -301,6 +301,16 @@ const ACC=[
   {id:'headphones',label:'Наушники',p:390,slot:'ears2'},{id:'chain',label:'Цепочка',p:390,slot:'neck'},{id:'bowtie',label:'Бабочка',p:190,slot:'neck'},{id:'scarf',label:'Шарф',p:290,slot:'neck'},
   {id:'cape',label:'Плащ героя',p:490,slot:'back'},{id:'watch',label:'Часы',p:290,slot:'wrist'},{id:'plaster',label:'Пластырь',p:90,slot:'face'},{id:'guitar',label:'Гитара',p:590,slot:'hands'}
 ];
+const CLOTHES=[
+  {id:'hoodie',label:'Худи',slot:'top',sku:'CL-TOP-001',price:690,color:'#e8554e'},
+  {id:'sundress',label:'Сарафан',slot:'top',sku:'CL-TOP-002',price:790,color:'#f06595'},
+  {id:'tshirt',label:'Футболка',slot:'top',sku:'CL-TOP-003',price:490,color:'#4dabf7'},
+  {id:'sneakers',label:'Кеды',slot:'feet',sku:'CL-FEET-001',price:390,color:'#f2f2f2'},
+  {id:'boots',label:'Ботинки',slot:'feet',sku:'CL-FEET-002',price:490,color:'#5b3b1f'}
+];
+const OUTFITS=[{name:'База',clothes:[]},{name:'Худи',clothes:['hoodie','sneakers']},{name:'Сарафан',clothes:['sundress','boots']}];
+const clothesTotal=l=>(l||[]).reduce((s,id)=>{const a=CLOTHES.find(x=>x.id===id);return s+(a?a.price:0)},0);
+const sameClothes=(a,b)=>{a=a||[];b=b||[];return a.length===b.length&&a.every(x=>b.includes(x))};
 const FUR={smooth:{len:0,N:0,grav:0,curl:0},short:{len:.028,N:8,grav:0,curl:0},fluffy:{len:.06,N:14,grav:.25,curl:0},xfluffy:{len:.11,N:18,grav:.6,curl:0},curly:{len:.07,N:14,grav:.1,curl:1}};
 const PRESETS=[
   {name:'Классика',d:'Тот самый мишка из детства',c:{}},
@@ -327,6 +337,7 @@ const TABS=[
   {id:'paws',label:'Лапки',focus:'all',icon:'<ellipse cx="12" cy="15.5" rx="5" ry="4.5"/><circle cx="6" cy="9" r="2"/><circle cx="10" cy="6" r="2"/><circle cx="14" cy="6" r="2"/><circle cx="18" cy="9" r="2"/>'},
   {id:'fur',label:'Ворс',focus:'all',icon:'<path d="M4 20c0-6 2-10 2-14M9 20c0-6 1-11 2-15M14 20c0-6 1-10 3-14M19 20c0-5 0-8 1-11"/>'},
   {id:'acc',label:'Аксессуары',focus:'all',icon:'<path d="M7 4h10l2 5-7 11L5 9z"/><path d="M5 9h14M10 4 9 9l3 11 3-11-1-5"/>'},
+  {id:'outfit',label:'Одежда',focus:'all',icon:'<path d="M12 3 8 6l-4 2 2 3 2-1v9h8v-9l2 1 2-3-4-2-4-3z"/>'},
   {id:'model',label:'3D-модель',focus:'all',icon:'<path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>'},
   {id:'order',label:'Размер',focus:'all',icon:'<rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>'}
 ];
@@ -385,6 +396,7 @@ function priceItems(c){
   if(c.limbColor)it.push(['Лапы другого цвета',190]);
   if(c.name.trim())it.push([`Вышивка имени «${c.name.trim()}»`,190]);
   c.acc.forEach(id=>{const a=ACC.find(x=>x.id===id);if(a)it.push([a.label,a.p])});
+  (c.clothes||[]).forEach(id=>{const a=CLOTHES.find(x=>x.id===id);if(a)it.push([a.label,a.price])});
   return it;
 }
 const total=c=>priceItems(c).reduce((s,x)=>s+x[1],0);
@@ -607,6 +619,7 @@ function build(){
   });
   R.B=B;
   buildAcc(c,head,H,hr,B,g);
+  buildClothes(c,B,g,{furL:SETS.main.sh.uLen.value});
   // ground
   root.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(g);g.position.y=-box.min.y;R.baseY=g.position.y;
   root.updateMatrixWorld(true);
@@ -644,6 +657,21 @@ function buildEar(eg,c,e,s,set){
       const ant=mesh(new THREE.CylinderGeometry(e*.04,e*.04,e*.9,8),metal);ant.position.set(s*e*.35,e*1.6,0);ant.rotation.z=-s*.3;eg.add(ant);
       const tip=mesh(new THREE.SphereGeometry(e*.12,12,8),glow);tip.position.set(s*e*.48,e*2.02,0);eg.add(tip)}break;
   }
+}
+function buildClothes(c,B,g,opt={}){
+  const has=id=>(c.clothes||[]).includes(id);
+  const furL=opt.furL!=null?opt.furL:0, out=1+furL*0.5;
+  if(has('hoodie')){const m=std('#e8554e',{roughness:.95});
+    const torso=mesh(ellip(B.x*1.07*out,B.y*0.58,B.z*1.07*out,40,28),m);torso.position.y=B.y*0.10;g.add(torso);
+    const col=mesh(new THREE.TorusGeometry(B.x*0.66,B.x*0.15,12,32),m);col.rotation.x=Math.PI/2;col.position.y=B.y*0.66;g.add(col)}
+  if(has('tshirt')){const m=std('#4dabf7',{roughness:.9});
+    const torso=mesh(ellip(B.x*1.05*out,B.y*0.5,B.z*1.05*out,40,28),m);torso.position.y=B.y*0.18;g.add(torso)}
+  if(has('sundress')){const m=std('#f06595',{roughness:.88});m.side=THREE.DoubleSide;
+    const bod=mesh(ellip(B.x*1.05*out,B.y*0.46,B.z*1.05*out,40,28),m);bod.position.y=B.y*0.2;g.add(bod);
+    const sk=mesh(new THREE.CylinderGeometry(B.x*0.86,B.x*1.5,B.y*0.92,36,1,true),m);sk.position.y=-B.y*0.34;g.add(sk)}
+  const feet=(col,tall)=>{[-1,1].forEach(s=>{const sh=mesh(ellip(B.x*0.27,B.y*(tall?0.34:0.17),B.z*0.42,20,14),std(col,{roughness:.85}));sh.position.set(s*B.x*0.42,-B.y*0.96,B.z*0.16);g.add(sh)})};
+  if(has('sneakers'))feet('#f2f2f2',false);
+  if(has('boots'))feet('#5b3b1f',true);
 }
 function buildAcc(c,head,H,hr,B,g,opt={}){
   const has=id=>c.acc.includes(id);
@@ -826,6 +854,10 @@ function slider(k,label,l,r,cls=''){const id='s-'+k;const inp=el('input',{type:'
 function toggle(k,label,p){return el('button',{class:'tg','aria-pressed':String(!!cfg[k]),onclick:()=>set(k,!cfg[k])},[el('span',{},label),p?el('span',{class:'p'},'+'+p+' ₽'):null,el('span',{class:'knob'})])}
 const pro=x=>mode==='pro'?x:null;
 const RENDER={
+  outfit(){
+    const outf=el('div',{class:'grp'},OUTFITS.map(o=>el('button',{class:'preset','aria-pressed':String(sameClothes(cfg.clothes,o.clothes)),onclick:()=>{set('clothes',o.clothes.slice());wave=1;say(o.name+'!')}},[el('span',{},[el('b',{},o.name),el('span',{},o.clothes.length?o.clothes.map(id=>CLOTHES.find(a=>a.id===id).label).join(' · '):'без одежды')]),el('span',{class:'p'},(o.clothes.length?'+'+fmt(clothesTotal(o.clothes)):'0')+' ₽')])));
+    const items=el('div',{class:'tiles'},CLOTHES.map(a=>el('button',{class:'tile','aria-pressed':String((cfg.clothes||[]).includes(a.id)),onclick:()=>{let l=(cfg.clothes||[]).slice();if(l.includes(a.id))l=l.filter(x=>x!==a.id);else{l=l.filter(x=>{const o=CLOTHES.find(y=>y.id===x);return !(o&&o.slot===a.slot)});l.push(a.id);wave=1}set('clothes',l)}},[a.label,el('span',{class:'p'},'+'+fmt(a.price)+' ₽')])));
+    return [el('h2',{},'Одежда'),el('p',{class:'hint'},'Один мишка — разные образы. Одежда отдельным слоем: каждая вещь идёт в заявку отдельной позицией со своим артикулом.'),grp('Образы',outf),grp('Вещи по отдельности',items)]},
   presets(){const list=el('div',{class:'grp'});PRESETS.forEach(p=>{const c=Object.assign(clone(DEF),p.c);list.append(el('button',{class:'preset',onclick:()=>applyCfg(c,p.name+'! Теперь можешь менять что угодно')},[el('span',{class:'dot',style:'background:'+c.main}),el('span',{},[el('b',{},p.name),el('span',{},p.d)]),el('span',{class:'p'},fmt(total(c))+' ₽')]))});
     return [el('h2',{},'Готовые мишки'),el('p',{class:'hint'},'Выбери мишку как основу или опиши своего словами в строке «Хочу…» внизу.'),list]},
   head(){const t=TM();return [el('h2',{},'Голова и уши'),t?null:grp('Форма головы',tiles('headShape',OPT.headShape)),slider('headSize','Размер головы','меньше','больше'),t?null:pro(slider('muzzleSize','Мордочка','маленькая','большая')),
@@ -1038,6 +1070,7 @@ function teddyUpdate(){const r=glb.rig,c=cfg,U=r.TU,F=FUR[c.furType],b=r.b,k=glb
   const furW=U.uLen.value*k;
   const Hf=H.clone().addScalar(furW*.85),Bf=r.B.clone().addScalar(furW*.85);
   buildAcc(c,r.acc,Hf,hr,Bf,r.bodyAcc,{eyeP,eyeR:er,furL:furW,neckY:.36*k,neckR:.27*k+furW*.9,front:new V3(0,.36*k,.33*k+furW*.8),wrist:r.wristAcc?{pv:r.wristAcc,y:0,r:.09*k+furW*.35}:null});
+  buildClothes(c,Bf,r.bodyAcc,{furL:furW});
   r.res={GEOS,MATS};GEOS=sg;MATS=sm;
 }
 let earT=0;
