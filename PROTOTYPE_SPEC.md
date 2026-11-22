@@ -50,3 +50,42 @@ Opens a modal:
 - `Мишка: плоский / 2D-картинка / 3D` — bear render mode. Default flat.
 - `Карта экранов` — jump to any of the 13 (for demo/review).
 Why: owner evaluates pure flow on flat, then commands beauty; one place to toggle, nothing hardcoded.
+
+## Full interaction contract (bug-free guard)
+Every visible control, its effect, and back/persist. Tap on empty = nothing. This is the source of truth; `flat/flow-test.mjs` walks it on every change.
+
+| Screen | Control | Effect |
+|---|---|---|
+| Дом | Угостить | bear animates + toast, NO navigation |
+| Дом | Изменить мишку | push Мастерская |
+| Дом/все хабы | нижнее меню | switchHub (очищает стек) |
+| Мастерская | ‹ | pop |
+| Мастерская | плитки плюша | меняют цвет мишки, сохраняется (голубой выбор) |
+| Мастерская | В гардероб | switchHub Гардероб |
+| Гардероб | карточка образа ×3 | set clothes → мишка+цена, persist, голубая рамка |
+| Гардероб | Посмотреть образ | push Мой мишка |
+| Мой мишка | В корзину | addItem + toast + push Корзина |
+| Мой мишка | Поделиться | push Поделиться |
+| Корзина | − / + | setQuantity (0 удаляет), пересчёт итога |
+| Корзина | Удалить | setQuantity 0 |
+| Корзина | Заявки (↗) | push Заявки |
+| Корзина | К доставке | push Доставка (disabled если пусто) |
+| Доставка | Самовывоз/Курьер | set pick (голубой) |
+| Доставка | Создать заявку | checkout → push Заявка собрана |
+| Заявка собрана | Открыть заявку | push Лист сборки |
+| Заявка собрана | Домой | switchHub Дом |
+| Заявки | строка заявки | push Лист сборки |
+| Заявки | Импорт JSON | importOrder из textarea |
+| Лист сборки | N шагов сборки | раскрыть/свернуть 13 шагов |
+| Лист сборки | Скачать JSON | copy exportOrder |
+| Поделиться | Скопировать ссылку | copy кода BEAR- |
+| Поделиться | Ввести код | dec → bear, persist |
+| Мир | здания | Мастерская→push, Игры/Гардероб→switchHub |
+| Три в ряд | фишка | выбор/свап; матч → +очки, −ход; ходы=0 → Результат |
+| Три в ряд | Заново | новое поле |
+| Результат | Ещё раз / Домой | новая игра / switchHub Дом |
+| Админка (⚙) | Красота вкл/выкл | body.beauty (место под FLORA-скин) |
+| Админка | Мишка плоский/2D/3D | режим мишки (заглушка под FLORA/3D) |
+| Админка | Карта экранов | прыжок на любой из 13 |
+
+Persist: bear, корзина, заявки, рекорды — переживают перезагрузку. Back всегда сохраняет выбор (состояние глобальное).
