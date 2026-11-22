@@ -1,0 +1,110 @@
+/* Workshop navigation is independent of the scene and stays available while editing. */
+.app { grid-template-rows: 64px minmax(0, 1fr); }
+.top { gap: 8px; }
+.logo { flex: none; }
+.logo img { height: 26px; }
+.logo small { font-size: 10px; }
+.work-nav { display: flex; align-items: center; gap: 4px; }
+.work-nav button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 40px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px 10px; background: transparent; color: var(--ink);
+  white-space: nowrap; font-size: 13px; font-weight: 700;
+}
+.work-nav button:hover { background: var(--panel-2); }
+.work-nav svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#cart-count { color: var(--sun); font-weight: 800; font-variant-numeric: tabular-nums; }
+.sheet-add { display: none; }
+.done { padding: 13px 22px; font-size: 17px; }
+.is-reference .badge { display: none; }
+.reference {
+  position: absolute; inset: 20px 22px 184px; margin: 0; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+.ref-image { flex: 1 1 auto; align-self: stretch; min-height: 0; display: grid; place-items: center; }
+.reference img { width: 100%; height: 100%; max-width: 100%; min-height: 0; object-fit: contain; }
+.reference figcaption {
+  flex: none; max-width: min(100%, 450px); padding: 8px 14px; border: 1px solid var(--line);
+  background: rgba(25,27,63,.92); text-align: center; border-radius: 12px;
+  display: grid; justify-items: center; gap: 3px; line-height: 1.35;
+}
+.reference figcaption strong { font-size: 14px; }
+.reference figcaption > span { color: var(--muted); font-size: 12px; }
+.ref-selection { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+#ref-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.55); }
+#ref-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubble { z-index: 1; }
+@media (max-width: 1190px) {
+  .logo small { display: none; }
+}
+@media (min-width: 761px) and (max-width: 930px) {
+  .app { grid-template-columns: 66px 240px minmax(0, 1fr); }
+  .top { padding: 0 9px; gap: 5px; }
+  .logo img { height: 22px; }
+  .work-nav button { font-size: 12px; padding: 6px 8px; }
+  .ibtn { width: 36px; height: 36px; }
+  .seg button { padding: 8px 9px; }
+  .want .ex { display: none; }
+  .reference { bottom: 145px; }
+}
+@media (max-width: 760px) {
+  .app { height: 100dvh; }
+  .top { background: var(--panel); border-bottom: 1px solid var(--line); padding-bottom: 7px; }
+  .logo img { height: 20px; }
+  .work-nav button { min-height: 35px; font-size: 12px; padding: 5px 7px; }
+  .work-nav svg { width: 15px; height: 15px; }
+  .reference { inset: calc(72px + env(safe-area-inset-top,0px)) 14px calc(var(--railH,64px) + 144px); gap: 7px; }
+  .reference figcaption { padding: 6px 12px; }
+  .sheet-add { display: block; flex: none; align-self: stretch; margin: 3px 14px 8px; min-height: 38px; font-weight: 800; color: var(--go-ink); background: var(--go); border: 0; border-radius: 11px; }
+  .sheetwrap { height: min(50dvh, 440px); }
+  .panel { min-height: 0; padding-bottom: 10px; }
+  .done { font-size: 15px; padding: 12px 16px; }
+  .rbtn { width: 40px; height: 40px; }
+  .tools { gap: 5px; }
+  .app.sheet-open .reference { bottom: calc(var(--railH,64px) + min(50dvh, 440px) + 4px); }
+  .app.sheet-open .reference figcaption { display: none; }
+  .app.sheet-full .sheetwrap { height: calc(100dvh - var(--railH,64px) - 55px - env(safe-area-inset-top,0px)); }
+}
+@media (max-width: 540px) {
+  .top {
+    display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center;
+    gap: 5px 4px; padding-inline: max(8px, env(safe-area-inset-left,0px)) max(8px, env(safe-area-inset-right,0px));
+  }
+  .logo img { width: min(100%, 124px); height: auto; }
+  .top .spacer { display: none; }
+  .work-nav { justify-self: end; }
+  .seg { justify-self: start; }
+  .price { justify-self: end; }
+  .stage .bubble { top: calc(88px + env(safe-area-inset-top,0px)); }
+  .app.sheet-full .sheetwrap { height: calc(100dvh - var(--railH,64px) - 90px - env(safe-area-inset-top,0px)); }
+  .reference { top: calc(93px + env(safe-area-inset-top,0px)); }
+}
+@media (max-width: 355px) {
+  .work-nav svg { display: none; }
+  .rbtn { width: 37px; height: 37px; }
+  .tools { gap: 4px; left: 8px; }
+  .done { right: 8px; }
+}
+@media (orientation: landscape) and (max-height: 550px) {
+  .want .ex { display: none; }
+  .want { bottom: 56px; }
+  .want input { padding: 5px 8px; }
+  .tools, .done { bottom: 7px; }
+  .rbtn { width: 35px; height: 35px; }
+  .done { padding: 8px 12px; font-size: 14px; }
+  .reference { top: 4px; bottom: 105px; gap: 2px; }
+  .reference figcaption { padding: 3px 10px; }
+  .reference figcaption strong { font-size: 12px; }
+  .reference figcaption > span { font-size: 10px; }
+}
+@media (orientation: landscape) and (max-height: 550px) and (max-width: 760px) {
+  .rail { padding-block: 1px env(safe-area-inset-bottom,0px); }
+  .rail button { padding-block: 2px; gap: 1px; }
+  .rail button svg { width: 19px; height: 19px; }
+  .want { width: min(44%, 290px); left: 48%; bottom: calc(var(--railH,45px) + 7px); }
+  .tools, .done { bottom: calc(var(--railH,45px) + 7px); }
+  .want button { padding-inline: 7px; }
+  .reference { top: calc(51px + env(safe-area-inset-top,0px)); bottom: calc(var(--railH,45px) + 56px); }
+  .sheetwrap { height: 65dvh; }
+  .app.sheet-open .reference { bottom: calc(var(--railH,45px) + 65dvh); }
+}

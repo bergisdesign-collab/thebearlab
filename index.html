@@ -12,7 +12,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BearLab">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@500;600;700;800&display=swap">
 <style>
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 img{max-width:100%}
@@ -208,13 +207,19 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+<link rel="stylesheet" href="sandbox/workshop.css">
+<link rel="stylesheet" href="sandbox/order-ui.css">
 </head>
 <body>
 
 <div class="app" id="app">
   <header class="top">
-    <div class="logo"><img src="logo.png" alt="The BeAR Lab" width="600" height="96"><small>Мастерская мишек · прототип</small></div>
+    <div class="logo"><img src="logo.png" alt="The BeAR Lab" width="600" height="96"><small>Мастерская мишек</small></div>
     <div class="spacer"></div>
+    <nav class="work-nav" aria-label="Разделы демо">
+      <button id="open-production"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 20h18v-9l-6 3V9l-6 3V5H5l-2 15Z"/><path d="M7 17h1m4 0h1m4 0h1"/></svg>Производство</button>
+      <button id="open-cart"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m3 4 2 1 2 11h11l3-8H6"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg>Корзина <span id="cart-count" hidden>0</span></button>
+    </nav>
     <button class="ibtn" id="undo" aria-label="Отменить" title="Отменить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
     <button class="ibtn" id="redo" aria-label="Повторить" title="Повторить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     <div class="seg" role="group" aria-label="Режим">
@@ -224,15 +229,21 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
     <div class="price" aria-live="polite"><span id="price">2 990</span> ₽</div>
   </header>
   <nav class="rail" id="rail" role="tablist" aria-label="Части мишки"></nav>
-  <section class="sheetwrap" id="sheet"><button class="grab" id="grab" aria-label="Свернуть панель"><span></span></button><div class="panel" id="panel" aria-live="polite"></div></section>
+  <section class="sheetwrap" id="sheet"><button class="grab" id="grab" aria-label="Свернуть панель"><span></span></button><div class="panel" id="panel" role="tabpanel"></div><button class="sheet-add" id="sheet-add">В корзину</button></section>
   <main class="stage" id="stage">
     <div class="loading" id="loading">Загружаю мишку…</div>
+    <figure id="reference" class="reference" hidden>
+      <div class="ref-image"><img id="reference-image" alt="Визуальный референс плюшевого мишки" width="509" height="1024"></div>
+      <figcaption><strong>Референс мишки</strong><span>3D недоступно. Выбор сохраняется в комплектации.</span>
+        <span class="ref-selection"><i id="ref-swatch"></i><span id="ref-summary"></span></span>
+      </figcaption>
+    </figure>
     <div class="ov">
-      <div class="bubble" id="bubble" data-off="1"></div>
+      <div class="bubble" id="bubble" role="status" data-off="1"></div>
       <div class="badge">Крути мишку пальцем · нажми на него</div>
       <div class="want">
         <form id="wantForm" autocomplete="off">
-          <input id="wantInput" type="text" placeholder="Хочу… например, «чёрного мишку с красными лапами»" aria-label="Опиши мишку словами">
+          <input id="wantInput" type="text" placeholder="Хочу мишку с красными лапами…" aria-label="Опиши мишку словами">
           <button type="submit">Собрать</button>
         </form>
         <div class="ex" id="examples"></div>
@@ -243,27 +254,35 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
         <button class="rbtn r-violet" id="random" aria-label="Удиви меня" title="Удиви меня"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.3" fill="#fff"/><circle cx="15" cy="15" r="1.3" fill="#fff"/><circle cx="15" cy="9" r="1.3" fill="#fff"/><circle cx="9" cy="15" r="1.3" fill="#fff"/></svg></button>
         <button class="rbtn r-blue" id="share" aria-label="Код мишки" title="Код мишки"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 14v5h14v-5"/></svg></button>
       </div>
-      <button class="done" id="done">ГОТОВО</button>
+      <button class="done" id="done">В корзину</button>
     </div>
   </main>
 </div>
 <div class="modal" id="modal" hidden></div>
-<canvas id="confetti"></canvas>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<script src="./vendor/three-r147/three.min.js"></script>
+<script src="sandbox/order-model.js"></script>
+<script src="sandbox/order-ui.js"></script>
 <script>
-window.addEventListener('error',e=>{const b=document.getElementById('bubble');if(b){b.textContent='Ошибка: '+(e.message||'')+' (строка '+(e.lineno||'?')+')';b.dataset.off='0'}});
-(function(){
+(async function(){
 "use strict";
+// Keep the local ordering tools available if the 3D engine or its add-ons cannot load.
+if (window.THREE) {
+  await Promise.all(['OrbitControls.js', 'GLTFLoader.js'].map(file => new Promise(done => {
+    const script = document.createElement('script');
+    script.src = './vendor/three-r147/' + file;
+    script.onload = script.onerror = done;
+    document.head.append(script);
+  })));
+}
 /* ============ DATA ============ */
 const PAL=['#9b6a43','#c98b4f','#e8c39e','#f5efe6','#ffffff','#8a8f98','#2b2b2e','#ff8fb8','#ffc7de','#b48cff','#8b5cf6','#3b5bdb','#7cc4ff','#3fc1d9','#5fd38d','#f6e21b','#ff9a3c','#e53935','#7a3e2b','#1f3a6e'];
 const DEF={size:'30',name:'',furType:'fluffy',furLen:.5,furDensity:.55,main:'#9b6a43',accent:'#e2bf98',earColor:'',limbColor:'',pads:'#e2bf98',nose:'#2a1d18',tip:'#d9ad7c',tipMix:.3,
   pattern:'none',patternColor:'#f5efe6',headShape:'round',headSize:.5,muzzleSize:.5,ears:'round',earSize:.5,earPos:.5,
   eyes:'button',eyeSize:.5,eyeSpacing:.5,eyeHeight:.45,iris:'#3b5bdb',glow:false,eyeSpots:false,
   mouth:'line',emotion:.45,browTilt:0,brows:false,blush:false,noseType:'oval',
-  body:'normal',bodyWidth:.5,belly:true,tail:true,pose:'sit',armLen:.5,armThick:.5,armPose:.35,claws:false,legLen:.5,legThick:.5,acc:[],glbTint:0,model:'teddy'};
+  body:'normal',bodyWidth:.5,belly:true,tail:true,pose:'sit',armLen:.5,armThick:.5,armPose:.35,claws:false,legLen:.5,legThick:.5,acc:[],clothes:[],glbTint:0,model:'teddy'};
 const OPT={
   headShape:[['round','Круглая'],['wide','Широкая'],['oval','Вытянутая']],
   ears:[['round','Круглые',0],['pointy','Острые',0],['floppy','Висячие',190],['bunny','Зайчьи',190],['cyber','Кибер-уши',490]],
@@ -282,6 +301,16 @@ const ACC=[
   {id:'headphones',label:'Наушники',p:390,slot:'ears2'},{id:'chain',label:'Цепочка',p:390,slot:'neck'},{id:'bowtie',label:'Бабочка',p:190,slot:'neck'},{id:'scarf',label:'Шарф',p:290,slot:'neck'},
   {id:'cape',label:'Плащ героя',p:490,slot:'back'},{id:'watch',label:'Часы',p:290,slot:'wrist'},{id:'plaster',label:'Пластырь',p:90,slot:'face'},{id:'guitar',label:'Гитара',p:590,slot:'hands'}
 ];
+const CLOTHES=[
+  {id:'hoodie',label:'Худи',slot:'top',sku:'CL-TOP-001',price:690,color:'#e8554e'},
+  {id:'sundress',label:'Сарафан',slot:'top',sku:'CL-TOP-002',price:790,color:'#f06595'},
+  {id:'tshirt',label:'Футболка',slot:'top',sku:'CL-TOP-003',price:490,color:'#4dabf7'},
+  {id:'sneakers',label:'Кеды',slot:'feet',sku:'CL-FEET-001',price:390,color:'#f2f2f2'},
+  {id:'boots',label:'Ботинки',slot:'feet',sku:'CL-FEET-002',price:490,color:'#5b3b1f'}
+];
+const OUTFITS=[{name:'База',clothes:[]},{name:'Худи',clothes:['hoodie','sneakers']},{name:'Сарафан',clothes:['sundress','boots']}];
+const clothesTotal=l=>(l||[]).reduce((s,id)=>{const a=CLOTHES.find(x=>x.id===id);return s+(a?a.price:0)},0);
+const sameClothes=(a,b)=>{a=a||[];b=b||[];return a.length===b.length&&a.every(x=>b.includes(x))};
 const FUR={smooth:{len:0,N:0,grav:0,curl:0},short:{len:.028,N:8,grav:0,curl:0},fluffy:{len:.06,N:14,grav:.25,curl:0},xfluffy:{len:.11,N:18,grav:.6,curl:0},curly:{len:.07,N:14,grav:.1,curl:1}};
 const PRESETS=[
   {name:'Классика',d:'Тот самый мишка из детства',c:{}},
@@ -308,6 +337,7 @@ const TABS=[
   {id:'paws',label:'Лапки',focus:'all',icon:'<ellipse cx="12" cy="15.5" rx="5" ry="4.5"/><circle cx="6" cy="9" r="2"/><circle cx="10" cy="6" r="2"/><circle cx="14" cy="6" r="2"/><circle cx="18" cy="9" r="2"/>'},
   {id:'fur',label:'Ворс',focus:'all',icon:'<path d="M4 20c0-6 2-10 2-14M9 20c0-6 1-11 2-15M14 20c0-6 1-10 3-14M19 20c0-5 0-8 1-11"/>'},
   {id:'acc',label:'Аксессуары',focus:'all',icon:'<path d="M7 4h10l2 5-7 11L5 9z"/><path d="M5 9h14M10 4 9 9l3 11 3-11-1-5"/>'},
+  {id:'outfit',label:'Одежда',focus:'all',icon:'<path d="M12 3 8 6l-4 2 2 3 2-1v9h8v-9l2 1 2-3-4-2-4-3z"/>'},
   {id:'model',label:'3D-модель',focus:'all',icon:'<path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>'},
   {id:'order',label:'Размер',focus:'all',icon:'<rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 8v3M11 8v4M15 8v3M19 8v4"/>'}
 ];
@@ -317,8 +347,41 @@ let cfg=load()||clone(DEF);
 let mode='kid', tab='presets';
 const hist=[JSON.stringify(cfg)]; let hi=0;
 function clone(o){return JSON.parse(JSON.stringify(o))}
-function load(){try{const s=localStorage.getItem('tbl-bear-v1');if(s)return Object.assign(clone(DEF),JSON.parse(s))}catch(e){}return null}
-function save(){try{localStorage.setItem('tbl-bear-v1',JSON.stringify(cfg))}catch(e){}}
+function readConfig(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Некорректный код');
+  const c = clone(DEF);
+  for (const [key, base] of Object.entries(DEF)) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    if (key === 'acc' && Array.isArray(value)) {
+      for (const id of value) if (ACC.some(a => a.id === id)) c.acc = addAcc(c.acc, id);
+    } else if (key === 'clothes' && Array.isArray(value)) {
+      const chosen = new Map();
+      for (const id of value) {
+        const item = workshopClothing().find(item => item.id === id);
+        if (item) chosen.set(item.slot,id);
+      }
+      c.clothes = [...chosen.values()];
+    } else if (key === 'name' && typeof value === 'string') c.name = value.slice(0, 10);
+    else if (key === 'model') c.model = value === 'parts' ? 'parts' : 'teddy';
+    else if (OPT[key]) {
+      if (OPT[key].some(option => option[0] === value)) c[key] = value;
+    } else if (typeof base === 'number' && Number.isFinite(value)) {
+      const min = ['emotion','browTilt'].includes(key) ? -1 : 0;
+      c[key] = Math.max(min, Math.min(1, value));
+    } else if (typeof base === 'boolean' && typeof value === 'boolean') c[key] = value;
+    else if (typeof base === 'string' && typeof value === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) c[key] = value;
+  }
+  return c;
+}
+function draftKey() { return 'bearlab:workshop:' + new URL('.', location.href).pathname; }
+function load(){
+  try {
+    const raw = localStorage.getItem(draftKey()) || localStorage.getItem('tbl-bear-v1');
+    return raw ? readConfig(JSON.parse(raw)) : null;
+  } catch(e) { return null; }
+}
+function save(){try{localStorage.setItem(draftKey(),JSON.stringify(cfg))}catch(e){}}
 const UNIFORM_KEYS=new Set(['furLen','furDensity','tip','tipMix']);
 const TEX_KEYS=new Set(['main','accent','earColor','limbColor','pattern','patternColor','pads','name']);
 
@@ -333,6 +396,7 @@ function priceItems(c){
   if(c.limbColor)it.push(['Лапы другого цвета',190]);
   if(c.name.trim())it.push([`Вышивка имени «${c.name.trim()}»`,190]);
   c.acc.forEach(id=>{const a=ACC.find(x=>x.id===id);if(a)it.push([a.label,a.p])});
+  (c.clothes||[]).forEach(id=>{const a=CLOTHES.find(x=>x.id===id);if(a)it.push([a.label,a.price])});
   return it;
 }
 const total=c=>priceItems(c).reduce((s,x)=>s+x[1],0);
@@ -340,22 +404,32 @@ const fmt=n=>n.toLocaleString('ru-RU');
 
 /* ============ THREE SETUP ============ */
 const stage=document.getElementById('stage');
-if(!window.THREE){document.getElementById('loading').textContent='Не удалось загрузить 3D-движок. Проверьте интернет и обновите страницу.';return}
-const V3=THREE.Vector3;
+const V3 = window.THREE?.Vector3;
+let renderer = null, scene, camera, controls, LIGHT_DIR;
+function showReference() {
+  renderer?.domElement.remove();
+  renderer = null;
+  stage.classList.add('is-reference');
+  const img = document.getElementById('reference-image');
+  img.src = 'sandbox/bear-reference.webp';
+  document.getElementById('reference').hidden = false;
+}
 const isMobile=matchMedia('(max-width:760px)').matches||/Android|iPhone|iPad/i.test(navigator.userAgent);
-const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+try {
+  if (!window.THREE?.OrbitControls) throw new Error('WebGL controls unavailable');
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,isMobile?1.75:2));
 stage.prepend(renderer.domElement);
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(30,1,.1,100);
+scene=new THREE.Scene();
+camera=new THREE.PerspectiveCamera(30,1,.1,100);
 camera.position.set(0,2.2,9);
-const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls=new THREE.OrbitControls(camera,renderer.domElement);
 controls.enableDamping=true;controls.dampingFactor=.08;controls.enablePan=false;controls.minDistance=2.6;controls.maxDistance=22;controls.maxPolarAngle=Math.PI*.55;
 controls.target.set(0,1.5,0);
 scene.add(new THREE.HemisphereLight(0xeef0ff,0x3a2c50,.85));
 const key=new THREE.DirectionalLight(0xffffff,.95);key.position.set(3,6,5);scene.add(key);
 const rimL=new THREE.DirectionalLight(0x9fd8ff,.45);rimL.position.set(-5,3,-4);scene.add(rimL);
-const LIGHT_DIR=new V3(.45,.85,.65).normalize();
+LIGHT_DIR=new V3(.45,.85,.65).normalize();
 // podium + soft shadow
 (function(){const cv=document.createElement('canvas');cv.width=cv.height=128;const x=cv.getContext('2d');const g=x.createRadialGradient(64,64,4,64,64,64);g.addColorStop(0,'rgba(10,12,50,.55)');g.addColorStop(1,'rgba(10,12,50,0)');x.fillStyle=g;x.fillRect(0,0,128,128);
   const pod=new THREE.Group();scene.add(pod);
@@ -365,10 +439,14 @@ const LIGHT_DIR=new V3(.45,.85,.65).normalize();
   const glow=new THREE.Mesh(new THREE.TorusGeometry(2.27,.03,10,96),new THREE.MeshBasicMaterial({color:0x2ee6f0}));glow.rotation.x=Math.PI/2;glow.position.y=-.3;pod.add(glow);
   const m=new THREE.Mesh(new THREE.PlaneGeometry(4,4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false}));m.rotation.x=-Math.PI/2;m.position.y=.006;scene.add(m);
   window.__pod=pod})();
+} catch (error) {
+  showReference();
+}
+
 
 /* ---- textures ---- */
 function canvasTex(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;const t=new THREE.CanvasTexture(c);t.wrapS=THREE.RepeatWrapping;return {c,x:c.getContext('2d'),t}}
-const TX={main:canvasTex(1024,512),accent:canvasTex(64,32),ear:canvasTex(64,32),limb:canvasTex(1024,512),pad:canvasTex(64,32),padName:canvasTex(512,256)};
+const TX=renderer ? {main:canvasTex(1024,512),accent:canvasTex(64,32),ear:canvasTex(64,32),limb:canvasTex(1024,512),pad:canvasTex(64,32),padName:canvasTex(512,256)} : null;
 function rnd(seed){let s=seed;return()=>{s=(s*16807)%2147483647;return(s-1)/2147483646}}
 function heartPath(x,cx,cy,s){x.beginPath();x.moveTo(cx,cy+s*.35);x.bezierCurveTo(cx-s*1.1,cy-s*.4,cx-s*.45,cy-s*1.05,cx,cy-s*.45);x.bezierCurveTo(cx+s*.45,cy-s*1.05,cx+s*1.1,cy-s*.4,cx,cy+s*.35);x.fill()}
 function starPath(x,cx,cy,r){x.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rr=i%2?r*.45:r;x.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr)}x.closePath();x.fill()}
@@ -389,8 +467,16 @@ function paintSolid(T,col){T.x.fillStyle=col;T.x.fillRect(0,0,T.c.width,T.c.heig
 function paintPadName(){const T=TX.padName,{x,c}=T;x.fillStyle=cfg.pads;x.fillRect(0,0,c.width,c.height);const n=cfg.name.trim();
   if(n){x.save();const l=lum(cfg.pads);x.fillStyle=l>.55?'#3a2416':'#fff7e8';x.font=`800 ${n.length>6?24:30}px Manrope, Arial, sans-serif`;x.textAlign='center';x.textBaseline='middle';x.translate(c.width*.25,c.height*.5);x.fillText(n,0,0);x.restore()}
   T.t.needsUpdate=true}
-function lum(h){const c=new THREE.Color(h);return .3*c.r+.59*c.g+.11*c.b}
-function paintAll(){paintPattern(TX.main,cfg.main);paintSolid(TX.accent,cfg.accent);
+function channels(h) {
+  const hex = h.slice(1);
+  const full = hex.length === 3 ? [...hex].map(c=>c+c).join('') : hex;
+  return [0, 2, 4].map(i => parseInt(full.slice(i, i+2), 16));
+}
+function lum(h) { const [r,g,b] = channels(h); return (.3*r+.59*g+.11*b)/255; }
+function lighten(h,t) { return '#' + channels(h).map(v=>Math.round(v+(255-v)*t).toString(16).padStart(2,'0')).join(''); }
+function paintAll(){
+  if (!renderer) return;
+paintPattern(TX.main,cfg.main);paintSolid(TX.accent,cfg.accent);
   if(cfg.earColor)paintSolid(TX.ear,cfg.earColor);
   if(cfg.limbColor)paintSolid(TX.limb,cfg.limbColor);
   paintSolid(TX.pad,cfg.pads);paintPadName()}
@@ -412,6 +498,8 @@ float fill=max(dot(N,normalize(vec3(-0.6,0.25,0.6))),0.0);float rim=pow(1.0-max(
 vec3 lit=col*(0.40+0.66*d+0.2*fill)*ao+rim*0.2*mix(col,vec3(1.0),0.45);gl_FragColor=vec4(lit,1.0);}`;
 const SETS={}; let curN=-1;
 function makeSets(){
+  if (!renderer) return;
+
   Object.values(SETS).forEach(s=>{s.base.dispose();s.shells.forEach(m=>m.dispose())});
   const F=FUR[cfg.furType];curN=Math.max(0,Math.round(F.N*(isMobile?.6:1)));
   [['main','main'],['accent','accent'],['ear','ear'],['limb','limb'],['pad','pad'],['padName','padName']].forEach(([k,t])=>{
@@ -449,6 +537,8 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 let bear=null,R={};
 function disposeBear(){if(!bear)return;scene.remove(bear);GEOS.forEach(g=>g.dispose());MATS.forEach(m=>m.dispose());GEOS=[];MATS=[];bear=null}
 function build(){
+  if (!renderer) return;
+
   const want=Math.max(0,Math.round(FUR[cfg.furType].N*(isMobile?.6:1)));if(want!==curN)makeSets();
   disposeBear();
   const c=cfg,root=new THREE.Group(),g=new THREE.Group();root.add(g);R={eyes:[],root,g};
@@ -529,6 +619,7 @@ function build(){
   });
   R.B=B;
   buildAcc(c,head,H,hr,B,g);
+  buildClothes(c,B,g,{furL:SETS.main.sh.uLen.value});
   // ground
   root.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(g);g.position.y=-box.min.y;R.baseY=g.position.y;
   root.updateMatrixWorld(true);
@@ -566,6 +657,21 @@ function buildEar(eg,c,e,s,set){
       const ant=mesh(new THREE.CylinderGeometry(e*.04,e*.04,e*.9,8),metal);ant.position.set(s*e*.35,e*1.6,0);ant.rotation.z=-s*.3;eg.add(ant);
       const tip=mesh(new THREE.SphereGeometry(e*.12,12,8),glow);tip.position.set(s*e*.48,e*2.02,0);eg.add(tip)}break;
   }
+}
+function buildClothes(c,B,g,opt={}){
+  const has=id=>(c.clothes||[]).includes(id);
+  const furL=opt.furL!=null?opt.furL:0, out=1+furL*0.5;
+  if(has('hoodie')){const m=std('#e8554e',{roughness:.95});
+    const torso=mesh(ellip(B.x*1.07*out,B.y*0.58,B.z*1.07*out,40,28),m);torso.position.y=B.y*0.10;g.add(torso);
+    const col=mesh(new THREE.TorusGeometry(B.x*0.66,B.x*0.15,12,32),m);col.rotation.x=Math.PI/2;col.position.y=B.y*0.66;g.add(col)}
+  if(has('tshirt')){const m=std('#4dabf7',{roughness:.9});
+    const torso=mesh(ellip(B.x*1.05*out,B.y*0.5,B.z*1.05*out,40,28),m);torso.position.y=B.y*0.18;g.add(torso)}
+  if(has('sundress')){const m=std('#f06595',{roughness:.88});m.side=THREE.DoubleSide;
+    const bod=mesh(ellip(B.x*1.05*out,B.y*0.46,B.z*1.05*out,40,28),m);bod.position.y=B.y*0.2;g.add(bod);
+    const sk=mesh(new THREE.CylinderGeometry(B.x*0.86,B.x*1.5,B.y*0.92,36,1,true),m);sk.position.y=-B.y*0.34;g.add(sk)}
+  const feet=(col,tall)=>{[-1,1].forEach(s=>{const sh=mesh(ellip(B.x*0.27,B.y*(tall?0.34:0.17),B.z*0.42,20,14),std(col,{roughness:.85}));sh.position.set(s*B.x*0.42,-B.y*0.96,B.z*0.16);g.add(sh)})};
+  if(has('sneakers'))feet('#f2f2f2',false);
+  if(has('boots'))feet('#5b3b1f',true);
 }
 function buildAcc(c,head,H,hr,B,g,opt={}){
   const has=id=>c.acc.includes(id);
@@ -623,6 +729,8 @@ function buildAcc(c,head,H,hr,B,g,opt={}){
 let camGoal=null;
 const portraitK=()=>{const a=camera.aspect||1;return a<.95?Math.min(1.7,Math.pow(.95/a,.6)):1};
 function focusCam(animate=true){
+  if (!renderer) return;
+
   const t=TABS.find(x=>x.id===tab),f=t?t.focus:'all';
   if(glb&&glb.rig){R.headW=glb.rig.headWorld();R.height=3.2}
   const h=R.headW||new V3(0,2.2,0),hgt=R.height||3.2;
@@ -635,10 +743,10 @@ function focusCam(animate=true){
 }
 
 /* ============ ANIMATION ============ */
-const clock=new THREE.Clock();let bounce=0,wave=0,blinkT=2,blink=0;const pointer=new THREE.Vector2();
-renderer.domElement.addEventListener('pointermove',e=>{const r=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1)});
-let downAt=null;renderer.domElement.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]});
-renderer.domElement.addEventListener('pointerup',e=>{if(!downAt||!bear)return;const d=Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1]);downAt=null;if(d>6)return;
+const clock=renderer ? new THREE.Clock() : null;let bounce=0,wave=0,blinkT=2,blink=0;const pointer=renderer ? new THREE.Vector2() : null;
+renderer?.domElement.addEventListener('pointermove',e=>{const r=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1)});
+let downAt=null;renderer?.domElement.addEventListener('pointerdown',e=>{downAt=[e.clientX,e.clientY]});
+renderer?.domElement.addEventListener('pointerup',e=>{if(!downAt||!bear)return;const d=Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1]);downAt=null;if(d>6)return;
   const r=renderer.domElement.getBoundingClientRect();const rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),camera);
   if(glb){if(rc.intersectObject(glb.wrap,true).length){if(glb.rig){bounce=1;wave=1;say(pick(['Хи-хи, щекотно!','Привет!','Обнимашки!','Я уже тебя люблю','Ещё!']));return}if(glb.clips.length)playClip(Math.floor(Math.random()*glb.clips.length));else play(pick(['jump','spin','dance']))}return}
   if(rc.intersectObject(bear,true).length){bounce=1;wave=1;say(pick(['Хи-хи, щекотно!','Привет!','Обнимашки!','Я уже тебя люблю','Ещё!']))}});
@@ -653,7 +761,7 @@ let act=null,glb=null,viewOff=0;
 function play(name){const m=MOVES.find(x=>x[0]===name);act={name,t:0,dur:{wave:2.2,dance:4.2,jump:1.15,spin:1.5,hug:2.8,sleep:5.5,clap:2.6,bow:1.9}[name]||2};if(name==='wave')wave=1;say(m?m[3]:'');renderMovesState()}
 const easeIO=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
 let FR=0,lastErr='';const DBG=location.hash==='#debug';let dbgEl=null;if(DBG){dbgEl=document.createElement('div');dbgEl.style.cssText='position:fixed;left:8px;top:70px;z-index:99;background:#000c;color:#0f0;font:12px monospace;padding:6px;white-space:pre;pointer-events:none';document.body.append(dbgEl)}
-function loop(){requestAnimationFrame(loop);FR++;try{loop0()}catch(err){if(String(err)!==lastErr){lastErr=String(err)+' @'+((err.stack||'').split('\n')[1]||'');console.error(err);say('Ошибка: '+err.message)}}
+function loop(){if (!renderer) return;requestAnimationFrame(loop);if (document.hidden || document.querySelector('dialog[open]')) return;FR++;try{loop0()}catch(err){if(String(err)!==lastErr){lastErr=String(err)+' @'+((err.stack||'').split('\n')[1]||'');console.error(err);say('Ошибка: '+err.message)}}
   if(DBG&&FR%10===0)dbgEl.textContent=`fr ${FR}\nact ${act?act.name+' '+act.t.toFixed(2):'-'}\nglb ${!!glb} rig ${!!(glb&&glb.rig)}\nwave ${wave.toFixed(2)}\nerr ${lastErr}`}
 function loop0(){
   const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
@@ -693,13 +801,17 @@ function loop0(){
   controls.update();renderer.render(scene,camera);
 }
 const isPhone=()=>matchMedia('(max-width:760px)').matches;
-let lastAsp=0,refT=0;function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;const asp=w/h;if(lastAsp&&Math.abs(asp-lastAsp)>.12){clearTimeout(refT);refT=setTimeout(()=>focusCam(),250)}lastAsp=asp;renderer.setSize(w,h,false);camera.aspect=w/h;if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else camera.clearViewOffset();camera.updateProjectionMatrix();
-  const rl=document.getElementById('rail');if(rl)document.documentElement.style.setProperty('--railH',(isPhone()?rl.offsetHeight:0)+'px')}
-new ResizeObserver(resize).observe(stage);
+let lastAsp=0,refT=0;function resize(){
+  const railHeight = isPhone() ? document.getElementById('rail').offsetHeight : 0;
+  document.documentElement.style.setProperty('--railH', railHeight + 'px');
+  document.getElementById('sheet').inert = isPhone() && !document.getElementById('app').classList.contains('sheet-open');
+  if (!renderer) return;
+  const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;const asp=w/h;if(lastAsp&&Math.abs(asp-lastAsp)>.12){clearTimeout(refT);refT=setTimeout(()=>focusCam(),250)}lastAsp=asp;renderer.setSize(w,h,false);camera.aspect=w/h;if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else camera.clearViewOffset();camera.updateProjectionMatrix()}
+if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
 
 /* ============ UPDATE PIPE ============ */
 let rebuildQ=false;
-function scheduleRebuild(){if(rebuildQ)return;rebuildQ=true;requestAnimationFrame(()=>{rebuildQ=false;build()})}
+function scheduleRebuild(){if(!renderer || rebuildQ)return;rebuildQ=true;requestAnimationFrame(()=>{rebuildQ=false;build()})}
 function set(k,v,o={}){
   cfg[k]=v;
   if(k==='glbTint'||k==='main')applyTint();
@@ -716,7 +828,12 @@ function applyCfg(n,msg){const md=cfg.model;cfg=Object.assign(clone(DEF),n);cfg.
 function commit(){const s=JSON.stringify(cfg);if(s===hist[hi])return;hist.splice(hi+1);hist.push(s);if(hist.length>80)hist.shift();hi=hist.length-1;updHist();bounce=Math.max(bounce,.6)}
 function updHist(){document.getElementById('undo').disabled=hi<=0;document.getElementById('undo2').disabled=hi<=0;document.getElementById('redo').disabled=hi>=hist.length-1}
 function goHist(d){const ni=hi+d;if(ni<0||ni>=hist.length)return;hi=ni;cfg=JSON.parse(hist[hi]);paintAll();makeSets();build();if(glb&&glb.rig)teddyUpdate();renderPanel();updPrice();save();updHist()}
-let lastP=0;function updPrice(){const t=total(cfg);document.getElementById('price').textContent=fmt(t);if(lastP&&t!==lastP){const b=document.querySelector('.price');b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop')}lastP=t}
+let lastP=0;function updPrice(){
+  if (!renderer) {
+    document.getElementById('ref-swatch').style.backgroundColor = cfg.main;
+    document.getElementById('ref-summary').textContent = [cfg.name, optL('size',cfg.size), optL('furType',cfg.furType), ...cfg.acc.map(id=>ACC.find(a=>a.id===id)?.label)].filter(Boolean).join(' · ');
+  }
+  const t=total(cfg);document.getElementById('price').textContent=fmt(t);if(lastP&&t!==lastP){const b=document.querySelector('.price');b.classList.remove('pop');void b.offsetWidth;b.classList.add('pop')}lastP=t}
 let sayT;function say(t){const b=document.getElementById('bubble');b.textContent=t;b.dataset.off='0';clearTimeout(sayT);sayT=setTimeout(()=>b.dataset.off='1',3200)}
 
 /* ============ UI BUILDERS ============ */
@@ -737,6 +854,10 @@ function slider(k,label,l,r,cls=''){const id='s-'+k;const inp=el('input',{type:'
 function toggle(k,label,p){return el('button',{class:'tg','aria-pressed':String(!!cfg[k]),onclick:()=>set(k,!cfg[k])},[el('span',{},label),p?el('span',{class:'p'},'+'+p+' ₽'):null,el('span',{class:'knob'})])}
 const pro=x=>mode==='pro'?x:null;
 const RENDER={
+  outfit(){
+    const outf=el('div',{class:'grp'},OUTFITS.map(o=>el('button',{class:'preset','aria-pressed':String(sameClothes(cfg.clothes,o.clothes)),onclick:()=>{set('clothes',o.clothes.slice());wave=1;say(o.name+'!')}},[el('span',{},[el('b',{},o.name),el('span',{},o.clothes.length?o.clothes.map(id=>CLOTHES.find(a=>a.id===id).label).join(' · '):'без одежды')]),el('span',{class:'p'},(o.clothes.length?'+'+fmt(clothesTotal(o.clothes)):'0')+' ₽')])));
+    const items=el('div',{class:'tiles'},CLOTHES.map(a=>el('button',{class:'tile','aria-pressed':String((cfg.clothes||[]).includes(a.id)),onclick:()=>{let l=(cfg.clothes||[]).slice();if(l.includes(a.id))l=l.filter(x=>x!==a.id);else{l=l.filter(x=>{const o=CLOTHES.find(y=>y.id===x);return !(o&&o.slot===a.slot)});l.push(a.id);wave=1}set('clothes',l)}},[a.label,el('span',{class:'p'},'+'+fmt(a.price)+' ₽')])));
+    return [el('h2',{},'Одежда'),el('p',{class:'hint'},'Один мишка — разные образы. Одежда отдельным слоем: каждая вещь идёт в заявку отдельной позицией со своим артикулом.'),grp('Образы',outf),grp('Вещи по отдельности',items)]},
   presets(){const list=el('div',{class:'grp'});PRESETS.forEach(p=>{const c=Object.assign(clone(DEF),p.c);list.append(el('button',{class:'preset',onclick:()=>applyCfg(c,p.name+'! Теперь можешь менять что угодно')},[el('span',{class:'dot',style:'background:'+c.main}),el('span',{},[el('b',{},p.name),el('span',{},p.d)]),el('span',{class:'p'},fmt(total(c))+' ₽')]))});
     return [el('h2',{},'Готовые мишки'),el('p',{class:'hint'},'Выбери мишку как основу или опиши своего словами в строке «Хочу…» внизу.'),list]},
   head(){const t=TM();return [el('h2',{},'Голова и уши'),t?null:grp('Форма головы',tiles('headShape',OPT.headShape)),slider('headSize','Размер головы','меньше','больше'),t?null:pro(slider('muzzleSize','Мордочка','маленькая','большая')),
@@ -753,11 +874,11 @@ const RENDER={
     grp('Цвет мишки',swatches('main')),pro(grp('Кончики ворса',swatches('tip'))),pro(slider('tipMix','Выгоревшие кончики','нет','сильно')),grp('Узор',tiles('pattern',OPT.pattern)),cfg.pattern!=='none'?grp('Цвет узора',swatches('patternColor')):null]},
   acc(){const t=el('div',{class:'tiles'},ACC.map(a=>el('button',{class:'tile','aria-pressed':String(cfg.acc.includes(a.id)),onclick:()=>{let l=cfg.acc.slice();if(l.includes(a.id))l=l.filter(x=>x!==a.id);else{l=l.filter(x=>{const o=ACC.find(y=>y.id===x);return !(o.slot===a.slot&&['head','eyes','neck'].includes(a.slot))});l.push(a.id);wave=1;say(pick(['Ого, '+a.label.toLowerCase()+'!','Мне идёт?','Красота!']))}set('acc',l)}},[a.label,el('span',{class:'p'},'+'+a.p+' ₽')])));
     return [el('h2',{},'Аксессуары'),el('p',{class:'hint'},'Шапки, очки и украшения на шею меняют друг друга, остальное можно сочетать.'),t]},
-  moves(){const g=el('div',{class:'moves',id:'moves'},MOVES.map(m=>el('button',{class:'move','data-m':m[0],'aria-pressed':String(!!act&&act.name===m[0]),onclick:()=>play(m[0])},[el('span',{html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${m[2]}</svg>`}),m[1]])));
+  moves(){if (!renderer) return [el('h2',{},'Движения'),el('p',{class:'hint'},'Анимации доступны в режиме 3D. Размер, ткань и аксессуары можно выбрать в соседних разделах.')];const g=el('div',{class:'moves',id:'moves'},MOVES.map(m=>el('button',{class:'move','data-m':m[0],'aria-pressed':String(!!act&&act.name===m[0]),onclick:()=>play(m[0])},[el('span',{html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${m[2]}</svg>`}),m[1]])));
     const out=[el('h2',{},'Движения'),el('p',{class:'hint'},'Нажми, и мишка покажет. А ещё его можно просто потрогать на экране.'),g];
     if(glb&&glb.clips.length)out.push(grp('Анимации модели',el('div',{class:'chips'},glb.clips.map((c,i)=>el('button',{class:'chip','aria-pressed':String(glb.curI===i),onclick:()=>playClip(i)},prettyClip(c.name,i))))));
     return out},
-  model(){const inp=el('input',{type:'file',id:'glb-file',accept:'.glb,.gltf,model/gltf-binary'});inp.addEventListener('change',()=>{if(inp.files[0]){cfg.model='custom';loadGLB(inp.files[0])}});
+  model(){if (!renderer) return [el('h2',{},'3D-модель'),el('p',{class:'hint'},'Сейчас показан статичный референс. Для вращения и загрузки моделей открой мастерскую в браузере с поддержкой WebGL.')];const inp=el('input',{type:'file',id:'glb-file',accept:'.glb,.gltf,model/gltf-binary'});inp.addEventListener('change',()=>{if(inp.files[0]){cfg.model='custom';loadGLB(inp.files[0])}});
     const cur=glb?(glb.isTeddy?'teddy':'custom'):'parts';
     const pick3=el('div',{class:'tiles'},[['teddy','Плюшевый','мех и кости'],['parts','Из деталей','любая форма'],['custom','Свой файл','GLB']].map(([id,l,sub])=>el('button',{class:'tile','aria-pressed':String(cur===id),onclick:()=>{if(id==='teddy'){cfg.model='teddy';save();loadTeddy()}else if(id==='parts'){removeGLB()}else document.getElementById('glb-file').click()}},[l,el('span',{class:'sub'},sub)])));
     const up=el('label',{class:'upload',for:'glb-file'},[inp,'Загрузить свою 3D-модель',el('span',{},'Файл .glb из Meshy, Tripo или Hunyuan 3D. Если кости названы как у нашего мишки, заработают все движения.')]);
@@ -769,15 +890,12 @@ const RENDER={
     out.push(up);
     if(glb&&glb.isTeddy)out.push(el('p',{class:'note'},'3D-модель: «Teddy Bear» © theacidrose (Sketchfab), лицензия CC BY 4.0. Добавлены скелет, веса и точки лица.'));
     return out},
-  order(){const ni=el('input',{class:'txt',id:'name',maxlength:'10',placeholder:'Например, Тоша',value:cfg.name});ni.addEventListener('input',()=>set('name',ni.value,{commit:false,render:false}));ni.addEventListener('change',()=>commit());
-    return [el('h2',{},'Размер и имя'),grp('Размер',tiles('size',OPT.size.map(o=>[o[0],o[1],0]))),el('p',{class:'note'},'20 см — 2 490 ₽ · 30 см — 2 990 ₽ · 45 см — 3 990 ₽'),grp('Имя мишки',ni),el('p',{class:'note'},'Имя вышьем на левой стопе (+190 ₽). Видно, когда мишка сидит.')]}
+  order(){const ni=el('input',{class:'txt',id:'name','aria-label':'Имя мишки для вышивки',maxlength:'10',placeholder:'Например, Тоша',value:cfg.name});ni.addEventListener('input',()=>set('name',ni.value,{commit:false,render:false}));ni.addEventListener('change',()=>commit());
+    return [el('h2',{},'Размер и имя'),grp('Размер',tiles('size',OPT.size.map(o=>[o[0],o[1],0]))),el('p',{class:'note'},'20 см — 2 490 ₽ · 30 см — 2 990 ₽ · 45 см — 3 990 ₽'),grp('Имя мишки',ni),el('p',{class:'note'},'В демо вышивка имени на левой стопе добавляет 190 ₽.')]}
 };
-function renderRail(){const r=document.getElementById('rail');r.innerHTML='';TABS.forEach(t=>r.append(el('button',{role:'tab','aria-selected':String(t.id===tab),onclick:()=>{const same=tab===t.id;tab=t.id;renderRail();renderPanel();focusCam();if(isPhone()){if(same&&appEl.classList.contains('sheet-open'))sheet('closed');else if(!appEl.classList.contains('sheet-open'))sheet('half')}}},[el('span',{html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>`}),t.label])))}
-function renderPanel(){const st=panel.scrollTop;panel.innerHTML='';panel.className='panel'+(mode==='kid'?' kid':'');const items=RENDER[tab]();const h=items[0];if(h&&h.tagName==='H2'){const i=TABS.findIndex(x=>x.id===tab)+1;h.append(el('span',{class:'no'},String(i).padStart(2,'0')))}items.forEach(x=>x&&panel.append(x));panel.scrollTop=st}
-function confetti(){if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const cv=document.getElementById('confetti'),x=cv.getContext('2d');cv.width=innerWidth*devicePixelRatio;cv.height=innerHeight*devicePixelRatio;x.scale(devicePixelRatio,devicePixelRatio);
-  const C=['#F6E21B','#35E04B','#19F0F0','#A56BFF','#ff8fb8','#ffffff'];const P=Array.from({length:140},()=>({x:innerWidth/2+(Math.random()-.5)*200,y:innerHeight*.55,vx:(Math.random()-.5)*14,vy:-Math.random()*16-6,r:Math.random()*6.28,vr:(Math.random()-.5)*.3,w:6+Math.random()*8,h:4+Math.random()*6,c:C[Math.random()*C.length|0]}));
-  let f=0;(function tick(){x.clearRect(0,0,innerWidth,innerHeight);P.forEach(p=>{p.vy+=.45;p.vx*=.99;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;x.save();x.translate(p.x,p.y);x.rotate(p.r);x.fillStyle=p.c;x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.restore()});if(++f<130)requestAnimationFrame(tick);else x.clearRect(0,0,innerWidth,innerHeight)})()}
-
+function renderRail(){const r=document.getElementById('rail');r.innerHTML='';TABS.forEach(t=>r.append(el('button',{role:'tab',id:'tab-'+t.id,'aria-controls':'panel','aria-selected':String(t.id===tab),onclick:()=>{const same=tab===t.id;tab=t.id;renderRail();document.getElementById('tab-'+tab).focus({preventScroll:true});renderPanel();focusCam();if(isPhone()){if(same&&appEl.classList.contains('sheet-open'))sheet('closed');else if(!appEl.classList.contains('sheet-open'))sheet('half')}}},[el('span',{html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>`}),t.label])))}
+let lastPanel;
+function renderPanel(){const st=lastPanel===tab?panel.scrollTop:0;lastPanel=tab;panel.setAttribute('aria-labelledby','tab-'+tab);panel.innerHTML='';panel.className='panel'+(mode==='kid'?' kid':'');const items=RENDER[tab]();items.forEach(x=>x&&panel.append(x));panel.scrollTop=st}
 /* ============ "ХОЧУ…" PARSER ============ */
 const COLORS=[['красн','#e53935','красный'],['алый','#e53935','алый'],['оранж','#ff9a3c','оранжевый'],['рыж','#d9773a','рыжий'],['жёлт','#f6e21b','жёлтый'],['желт','#f6e21b','жёлтый'],['золот','#e0b43a','золотой'],['зелён','#5fd38d','зелёный'],['зелен','#5fd38d','зелёный'],['салат','#a6e35b','салатовый'],['бирюз','#3fc1d9','бирюзовый'],['голуб','#7cc4ff','голубой'],['син','#3b5bdb','синий'],['фиолет','#8b5cf6','фиолетовый'],['сирен','#b48cff','сиреневый'],['розов','#ff8fb8','розовый'],['малин','#d6336c','малиновый'],['чёрн','#2b2b2e','чёрный'],['черн','#2b2b2e','чёрный'],['бел','#f7f5f0','белый'],['сер','#8a8f98','серый'],['коричн','#7a4a2b','коричневый'],['беж','#e8c39e','бежевый'],['шоколад','#5a3520','шоколадный']];
 const NOUN=[[['лап','рук','ног','нож'],'limbColor'],[['подуш'],'pads'],[['уш','ух'],'earColor'],[['глаз','глаза'],'iris'],[['нос'],'nose'],[['пуз','живот','морд'],'accent'],[['узор','пятн','полос','сердеч','звёзд','звезд'],'patternColor'],[['шерст','мех','ворс','мишк','медвед'],'main']];
@@ -836,7 +954,7 @@ function parseWish(text){
     target=target||'main';c[target]=col[1];
     if(target==='iris'&&!['glossy','anime','star'].includes(c.eyes))c.eyes='glossy';
     if(target==='patternColor'&&c.pattern==='none')c.pattern='spots';
-    if(target==='main'){const cc=new THREE.Color(col[1]);c.tip='#'+cc.clone().lerp(new THREE.Color('#ffffff'),.25).getHexString();if(lum(col[1])<.25&&c.accent===DEF.accent)c.accent='#'+cc.clone().lerp(new THREE.Color('#ffffff'),.2).getHexString()}
+    if(target==='main'){c.tip=lighten(col[1],.25);if(lum(col[1])<.25&&c.accent===DEF.accent)c.accent=lighten(col[1],.2)}
     got.push({limbColor:'лапки',pads:'подушечки',earColor:'уши',iris:'глаза',nose:'носик',accent:'мордочка',patternColor:'узор',main:'мишка'}[target]+' '+col[2])});
   return {c,got};
 }
@@ -848,7 +966,7 @@ const exBox=document.getElementById('examples');EX.forEach(x=>exBox.append(el('b
 
 /* ============ GLB MODEL ============ */
 function prettyClip(n,i){const m=(n||'').toLowerCase();const map=[['idle','Стоит'],['walk','Идёт'],['run','Бежит'],['wave','Машет'],['dance','Танцует'],['jump','Прыгает'],['clap','Хлопает'],['sit','Сидит'],['hug','Обнимает'],['bow','Кланяется'],['sleep','Спит'],['cheer','Радуется'],['spin','Кружится']];const f=map.find(x=>m.includes(x[0]));return f?f[1]:(n&&n.length<22?n:'Анимация '+(i+1))}
-function loadGLB(file){if(!THREE.GLTFLoader){say('Загрузчик моделей не загрузился. Обнови страницу.');return}
+function loadGLB(file){if(!renderer || !THREE.GLTFLoader){say('Загрузчик моделей не загрузился. Обнови страницу.');return}
   if(file.size>40*1024*1024){say('Файл больше 40 МБ. Уменьши модель (decimate) и попробуй снова.');return}
   say('Открываю модель…');const rd=new FileReader();
   rd.onload=()=>{try{new THREE.GLTFLoader().parse(rd.result,'',gl=>setupGLB(gl,file.name),err=>say('Не получилось открыть файл. Нужен .glb без Draco-сжатия.'))}catch(x){say('Не получилось открыть файл. Нужен .glb без Draco-сжатия.')}};
@@ -874,7 +992,7 @@ stage.addEventListener('dragover',e=>e.preventDefault());stage.addEventListener(
 /* ============ RIGGED TEDDY ============ */
 const TM=()=>!!(glb&&glb.rig);
 function disposeRes(r){if(!r)return;r.GEOS.forEach(g=>g.dispose());r.MATS.forEach(m=>m.dispose())}
-function loadTeddy(){if(!THREE.GLTFLoader){say('Загрузчик моделей не загрузился');return}
+function loadTeddy(){if(!renderer || !THREE.GLTFLoader){say('Загрузчик моделей не загрузился');return}
   fetch('teddy.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const bin=atob(j.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u.buffer}).then(buf=>new THREE.GLTFLoader().parse(buf,'',gl=>{setupGLB(gl,'Плюшевый мишка',true);if(glb)glb.isTeddy=true;renderPanel()},()=>teddyFail()))
   .catch(teddyFail)}
 function teddyFail(){cfg.model='parts';say('Плюшевый мишка не загрузился, показываю мишку из деталей')}
@@ -952,6 +1070,7 @@ function teddyUpdate(){const r=glb.rig,c=cfg,U=r.TU,F=FUR[c.furType],b=r.b,k=glb
   const furW=U.uLen.value*k;
   const Hf=H.clone().addScalar(furW*.85),Bf=r.B.clone().addScalar(furW*.85);
   buildAcc(c,r.acc,Hf,hr,Bf,r.bodyAcc,{eyeP,eyeR:er,furL:furW,neckY:.36*k,neckR:.27*k+furW*.9,front:new V3(0,.36*k,.33*k+furW*.8),wrist:r.wristAcc?{pv:r.wristAcc,y:0,r:.09*k+furW*.35}:null});
+  buildClothes(c,Bf,r.bodyAcc,{furL:furW});
   r.res={GEOS,MATS};GEOS=sg;MATS=sm;
 }
 let earT=0;
@@ -987,12 +1106,17 @@ function rigAnimate(dt,t,an,e,p,T){const r=glb.rig,b=r.b,c=cfg;
 
 /* ============ MOBILE SHEET ============ */
 const appEl=document.getElementById('app');
-function sheet(state){appEl.classList.toggle('sheet-open',state!=='closed');appEl.classList.toggle('sheet-full',state==='full')}
+function sheet(state){
+  appEl.classList.toggle('sheet-open',state!=='closed');
+  appEl.classList.toggle('sheet-full',state==='full');
+  document.getElementById('sheet').inert = isPhone() && state === 'closed';
+}
 (function(){const gb=document.getElementById('grab');let y0=null;
+  gb.addEventListener('click', e=>{if (e.detail === 0) sheet('closed')});
   gb.addEventListener('pointerdown',e=>{y0=e.clientY;gb.setPointerCapture(e.pointerId)});
   gb.addEventListener('pointerup',e=>{if(y0==null)return;const dy=e.clientY-y0;y0=null;const full=appEl.classList.contains('sheet-full');
     if(dy>40)sheet(full?'half':'closed');else if(dy<-40)sheet('full');else sheet(full?'half':'closed')})})();
-renderer.domElement.addEventListener('pointerdown',()=>{if(isPhone()&&appEl.classList.contains('sheet-full'))sheet('half')});
+renderer?.domElement.addEventListener('pointerdown',()=>{if(isPhone()&&appEl.classList.contains('sheet-full'))sheet('half')});
 
 /* ============ RANDOM / RESET / SHARE / ORDER ============ */
 function randomCfg(){const c=clone(DEF);const r=a=>a[Math.floor(Math.random()*a.length)],o=k=>r(OPT[k])[0];
@@ -1007,34 +1131,34 @@ const modal=document.getElementById('modal');
 function openModal(node,small){modal.innerHTML='';const sh=el('div',{class:'sheet'+(small?' small':''),role:'dialog','aria-modal':'true'});sh.append(...[].concat(node));modal.append(sh);modal.hidden=false;const f=sh.querySelector('button,input');f&&f.focus()}
 function closeModal(){modal.hidden=true;modal.innerHTML=''}
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();goHist(e.shiftKey?1:-1)}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&modal.hidden&&!document.querySelector('dialog[open]')&&!document.activeElement.matches('input, textarea, [contenteditable]')){e.preventDefault();goHist(e.shiftKey?1:-1)}});
 document.getElementById('reset').onclick=()=>{openModal([el('div',{class:'body'},[el('h3',{},'Начать заново?'),el('p',{class:'note'},'Мишка вернётся к классическому. Отменить можно стрелкой назад.'),el('div',{class:'acts'},[el('button',{class:'btn go',onclick:()=>{closeModal();applyCfg(clone(DEF),'Новый мишка!')}},'Да, заново'),el('button',{class:'btn g',onclick:closeModal},'Оставить')])])],true)};
 const enc=c=>{const d={};for(const k in c)if(JSON.stringify(c[k])!==JSON.stringify(DEF[k]))d[k]=c[k];return 'BEAR-'+btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/=+$/,'')};
-const dec=s=>{const b=s.trim().replace(/^BEAR-/i,'');return Object.assign(clone(DEF),JSON.parse(decodeURIComponent(escape(atob(b)))))};
+const dec=s=>{if(s.length>16000)throw new Error('Слишком длинный код');const b=s.trim().replace(/^BEAR-/i,'');return readConfig(JSON.parse(decodeURIComponent(escape(atob(b)))))};
 document.getElementById('share').onclick=()=>{const code=enc(cfg);const msg=el('p',{class:'note'},'Отправь код другу: он вставит его сюда и получит точно такого же мишку.');
   const inp=el('input',{class:'txt',id:'dna-in',placeholder:'Вставь код BEAR-…'});const err=el('p',{class:'note',style:'color:var(--risk)'});
   openModal([el('div',{class:'body'},[el('h3',{},'Код мишки'),msg,el('div',{class:'code',id:'dna'},code),el('div',{class:'acts'},[el('button',{class:'btn v',onclick:e=>{const b=e.currentTarget;const done=()=>b.textContent='Скопировано';if(navigator.clipboard)navigator.clipboard.writeText(code).then(done,()=>selectCode());else selectCode()}},'Скопировать')]),
     el('div',{class:'lbl',style:'font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:8px'},'Открыть чужой код'),inp,err,el('div',{class:'acts'},[el('button',{class:'btn go',onclick:()=>{try{const c=dec(inp.value);closeModal();applyCfg(c,'Мишка по коду загружен!')}catch(x){err.textContent='Код не подошёл. Проверь, что скопирован целиком.'}}},'Загрузить'),el('button',{class:'btn g',onclick:closeModal},'Закрыть')])])],true)};
 function selectCode(){const d=document.getElementById('dna');const r=document.createRange();r.selectNodeContents(d);const s=getSelection();s.removeAllRanges();s.addRange(r)}
-function spec(c){const L=(k)=>optL(k,c[k]);const rows=[['Размер',L('size')],['Ткань',L('furType')+(c.furType!=='smooth'?`, ворс ${Math.round((FUR[c.furType].len*(.6+c.furLen))*100)} мм`:'')],['Цвета',`основной ${c.main}, мордочка ${c.accent}${c.limbColor?', лапы '+c.limbColor:''}${c.earColor?', уши '+c.earColor:''}, подушечки ${c.pads}`],
-  ['Узор',L('pattern')+(c.pattern!=='none'?' '+c.patternColor:'')],['Голова',`${L('headShape')}, уши: ${L('ears')}`],['Глаза',L('eyes')+(['glossy','anime','star'].includes(c.eyes)?' '+c.iris:'')+(c.glow?', светятся':'')],
-  ['Мордочка',`рот: ${L('mouth')}, нос: ${L('noseType')}, эмоция ${c.emotion>.3?'весёлая':c.emotion<-.3?'грустная':'спокойная'}${c.brows?', бровки':''}${c.blush?', румянец':''}`],['Тело',`${L('body')}, ${L('pose').toLowerCase()}${c.belly?', пузико':''}${c.claws?', когти':''}`],
-  ['Аксессуары',c.acc.length?c.acc.map(id=>ACC.find(a=>a.id===id).label).join(', '):'нет'],['Имя',c.name.trim()||'без вышивки']];return rows}
-document.getElementById('done').onclick=()=>{
-  const img=renderer.domElement.toDataURL('image/png');const items=priceItems(cfg);
-  const tb=el('table',{class:'spec'});spec(cfg).forEach(([a,b])=>tb.append(el('tr',{},[el('td',{},a),el('td',{},b)])));
-  const pt=el('table',{class:'spec'});items.forEach(([a,b])=>pt.append(el('tr',{},[el('td',{},a),el('td',{class:'n'},fmt(b)+' ₽')])));
-  const bodyEl=el('div',{class:'body'});
-  const step1=()=>{bodyEl.innerHTML='';bodyEl.append(el('h3',{},cfg.name.trim()?`Мишка ${cfg.name.trim()} готов!`:'Твой мишка готов!'),el('div',{class:'lbl',style:'font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em'},'Техкарта для мастерской'),tb,el('div',{class:'lbl',style:'font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em'},'Стоимость'),pt,
-    el('div',{class:'total'},[el('b',{},'Итого'),el('span',{},fmt(total(cfg))+' ₽')]),
-    el('div',{class:'acts'},[el('button',{class:'btn go',onclick:step2},'Оформить заказ'),el('button',{class:'btn v',onclick:stepParent},'Попросить у взрослого'),el('button',{class:'btn g',onclick:closeModal},'Ещё поменяю')]))};
-  const stepParent=()=>{bodyEl.innerHTML='';bodyEl.append(el('h3',{},'Покажи этот экран взрослому'),el('p',{class:'note'},'Здесь всё, что ты придумал, и сколько это стоит. Взрослый может оформить заказ сам.'),el('div',{class:'total'},[el('b',{},'Итого'),el('span',{},fmt(total(cfg))+' ₽')]),
-    el('div',{class:'demo'},'В рабочей версии родителю придёт ссылка на оплату по СМС или в мессенджер, а ребёнку не нужно вводить свои данные.'),el('div',{class:'acts'},[el('button',{class:'btn go',onclick:step2},'Я взрослый, оформить'),el('button',{class:'btn g',onclick:step1},'Назад')]))};
-  const step2=()=>{bodyEl.innerHTML='';const f=el('form',{class:'form'});const fi=(id,ph,type='text')=>el('input',{class:'txt',id,placeholder:ph,type,required:''});
-    f.append(fi('o-name','Имя взрослого'),fi('o-phone','Телефон','tel'),fi('o-city','Город и адрес доставки'),el('button',{class:'btn go',type:'submit'},`Заказать за ${fmt(total(cfg))} ₽`));
-    f.addEventListener('submit',e=>{e.preventDefault();bodyEl.innerHTML='';bodyEl.append(el('h3',{},'Заявка собрана'),el('div',{class:'ok'},'Это демо-версия: заказ никуда не отправлен и оплата не списана.'),el('p',{class:'note'},'В рабочей версии здесь будет оплата, а мастерская получит техкарту и код мишки:'),el('div',{class:'code'},enc(cfg)),el('div',{class:'acts'},[el('button',{class:'btn g',onclick:closeModal},'Закрыть')]))});
-    bodyEl.append(el('h3',{},'Оформление'),el('div',{class:'demo'},'Прототип: данные не сохраняются и никуда не отправляются.'),f,el('div',{class:'acts'},[el('button',{class:'btn g',onclick:step1},'Назад')]))};
-  step1();openModal([el('div',{class:'shot'},el('img',{src:img,alt:'Твой мишка'})),bodyEl]);wave=1;bounce=1;confetti()};
+// Empty until the wardrobe branch supplies the CLOTHES catalog in this scope.
+function workshopClothing() { return typeof CLOTHES === 'undefined' ? [] : CLOTHES; }
+const basketCount = document.getElementById('cart-count');
+BearOrderUI.init({
+  getClothingCatalog: workshopClothing,
+  getExample() {
+    const config = {...clone(DEF), name: 'Тоша', acc: ['scarf', 'watch']};
+    return { config, price: total(config) };
+  },
+  onCount(quantity) {
+    basketCount.textContent = String(quantity);
+    basketCount.hidden = quantity === 0;
+  }
+});
+document.getElementById('open-cart').onclick = () => BearOrderUI.openCart();
+document.getElementById('open-production').onclick = () => BearOrderUI.openProduction();
+for (const id of ['done', 'sheet-add']) {
+  document.getElementById(id).onclick = () => BearOrderUI.add(clone(cfg), total(cfg));
+}
 
 /* ============ MODE ============ */
 function setMode(m){mode=m;document.getElementById('m-kid').setAttribute('aria-pressed',String(m==='kid'));document.getElementById('m-pro').setAttribute('aria-pressed',String(m==='pro'));renderPanel()}
@@ -1042,11 +1166,10 @@ document.getElementById('m-kid').onclick=()=>setMode('kid');document.getElementB
 document.getElementById('undo').onclick=()=>goHist(-1);document.getElementById('undo2').onclick=()=>goHist(-1);document.getElementById('redo').onclick=()=>goHist(1);
 
 /* ============ START ============ */
-paintAll();makeSets();renderRail();resize();build();focusCam(false);if(cfg.model!=='parts')loadTeddy();addEventListener('resize',resize);renderPanel();updPrice();updHist();
+paintAll();makeSets();renderRail();resize();build();focusCam(false);if(renderer && cfg.model!=='parts')loadTeddy();addEventListener('resize',resize);renderPanel();updPrice();updHist();
 document.getElementById('loading').remove();
-setTimeout(()=>say('Привет! Я твой мишка. Выбери готового или напиши «Хочу…»'),600);
-loop();
-try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
+if (renderer) loop();
+try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&window.isSecureContext&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
 })();
 </script>
 

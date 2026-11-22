@@ -1,12 +1,12 @@
 {
   "name": "TheBearLab — мастерская мишек",
   "short_name": "BearLab",
-  "description": "Собери своего плюшевого мишку в 3D и закажи его пошив",
+  "description": "Мастерская BearLab: сборка мишки и пример локальной заявки",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#191b3f",
   "theme_color": "#191b3f",
   "icons": [
