@@ -40,7 +40,7 @@ window.BearLabStudio={install(api){
     ]));sync();
   }
   let bearObserver;
-  function sync(){const id=document.body.dataset.screen;const host=api.is3d()&&id!=='workshop'?document.querySelector('#concept .cx-hero'):null;api.mountBear(host);if(bearObserver)bearObserver.disconnect();if(host&&window.ResizeObserver){bearObserver=new ResizeObserver(()=>api.resizeBear());bearObserver.observe(host)}document.querySelectorAll('.st-side [data-route]').forEach(b=>{if(b.dataset.route===id)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});document.querySelectorAll('.cx-nav button').forEach((b,i)=>{const span=b.querySelector('span');if(span&&!span.querySelector('svg'))span.replaceChildren(icon(['home','wardrobe','world','games'][i]))});const gear=document.getElementById('cx-gear');if(gear&&!gear.querySelector('svg')){gear.replaceChildren(icon('settings'));gear.setAttribute('aria-label','Настройки прототипа');gear.title='Настройки прототипа'}document.querySelectorAll('.cx-iconbtn').forEach(b=>{if(!b.querySelector('svg')){[...b.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.remove());b.prepend(icon('cart'))}})}
+  function sync(){const id=document.body.dataset.screen;document.querySelectorAll('.cx-gem').forEach(b=>b.dataset.gem=b.getAttribute('aria-label'));if(id==='games'&&!document.querySelector('.st-game-help')){const play=document.querySelector('.cx-play');play?.prepend(e('p',{class:'st-game-help'},'Выберите две соседние фишки. Соберите линию из трёх или больше.'))}const host=api.is3d()&&id!=='workshop'?document.querySelector('#concept .cx-hero'):null;api.mountBear(host);if(bearObserver)bearObserver.disconnect();if(host&&window.ResizeObserver){bearObserver=new ResizeObserver(()=>api.resizeBear());bearObserver.observe(host)}document.querySelectorAll('.st-side [data-route]').forEach(b=>{if(b.dataset.route===id)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});document.querySelectorAll('.cx-nav button').forEach((b,i)=>{const span=b.querySelector('span');if(span&&!span.querySelector('svg'))span.replaceChildren(icon(['home','wardrobe','world','games'][i]))});const gear=document.getElementById('cx-gear');if(gear&&!gear.querySelector('svg')){gear.replaceChildren(icon('settings'));gear.setAttribute('aria-label','Настройки прототипа');gear.title='Настройки прототипа'}document.querySelectorAll('.cx-iconbtn').forEach(b=>{if(!b.querySelector('svg')){[...b.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.remove());b.prepend(icon('cart'))}})}
   function pageHeading(title,description,eyebrow){return e('div',{class:'st-page-heading'},e('div',{},[eyebrow?e('div',{class:'st-eyebrow'},eyebrow):null,e('h1',{},title),e('p',{},description)]))}
   function preview(){const c=api.config();return e('section',{class:'st-preview','aria-label':'Ваш мишка'},[
     e('div',{class:'st-preview-top'},[e('b',{},'Ваш персонаж'),e('span',{class:'st-mode'},api.is3d()?'3D-модель':api.needsSnapshot(c)?'Снимок модели':'2D-иллюстрация')]),
@@ -71,6 +71,20 @@ window.BearLabStudio={install(api){
       ])
     ]),api.bottom('wardrobe')
   ])}
+  function world(){
+    const places=[['workshop','Мастерская','Цвет, форма и характер'],['wardrobe','Гардероб','Найдите любимый образ'],['games','Мини-игра','Соберите три в ряд']];
+    return e('div',{class:'cx-view','data-concept':'world'},[
+      pageHeading('Маленький мир. Большие истории.','Выберите, куда отправимся вместе с мишкой.','BearLab · карта мира'),
+      e('div',{class:'st-world-scroll'},[
+        e('div',{class:'st-world-scene'},[
+          e('img',{src:'assets/demo/world.png',alt:'Уютная площадь: мастерская с зелёной крышей, сиреневый гардероб и жёлтый игровой павильон',width:1536,height:1024}),
+          ...places.map(([id,label])=>button(label,()=>go(id),'st-world-pin st-pin-'+id,id))
+        ]),
+        e('div',{class:'st-destinations'},places.map(([id,label,desc])=>e('button',{type:'button',onclick:()=>go(id)},[e('span',{class:'st-destination-icon'},icon(id)),e('span',{},[e('strong',{},label),e('small',{},desc)]),icon('arrow')]))),
+        e('p',{class:'st-caption'},'Иллюстрация — проба, не утверждено.')
+      ]),api.bottom('world')
+    ])
+  }
   let lastFocus=null;
   function admin(){
     const box=document.getElementById('cx-admin');if(box.hidden)lastFocus=document.activeElement;
@@ -95,5 +109,5 @@ window.BearLabStudio={install(api){
     if(!content.contains(document.activeElement))content.querySelector('button')?.focus();
   }
   save();api.set3d(prefs.bear3d);shell();
-  return {bear:(c,s,t,p)=>art(c||api.config(),!!t,false,p),home,wardrobe,admin,sync,icon};
+  return {bear:(c,s,t,p)=>art(c||api.config(),!!t,false,p),home,wardrobe,world,admin,sync,icon};
 }};

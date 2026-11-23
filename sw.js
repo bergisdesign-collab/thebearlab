@@ -1,8 +1,8 @@
 // The cache belongs to this installation path; other apps on the host may also use Cache Storage.
 const prefix = 'thebearlab-shell:' + new URL(self.registration.scope).pathname + ':';
-const cacheName = prefix + 'studio-v1';
+const cacheName = prefix + 'studio-20261123-v2';
 const shell = [
-  'sandbox/bear-preview.js', 'sandbox/studio-ui.css', 'sandbox/studio-ui.js', 'assets/demo/bear-atlas.png',
+  'sandbox/bear-preview.js', 'sandbox/studio-ui.css', 'sandbox/studio-ui.js', 'assets/demo/bear-atlas.png', 'assets/demo/world.png',
   'index.html', 'manifest.webmanifest', 'logo.png', 'icon-192.png', 'icon-512.png',
   'icon-maskable-512.png', 'apple-touch-icon.png', 'teddy.json',
   'sandbox/bear-reference.webp', 'sandbox/order-model.js', 'sandbox/order-ui.js',
