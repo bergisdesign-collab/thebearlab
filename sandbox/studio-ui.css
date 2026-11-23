@@ -56,3 +56,7 @@ body[data-theme=game] .cx-grid{background:#c9b4e8;border-color:#bda3dd;box-shado
 @media(max-height:720px) and (max-width:760px){.cx-grid{max-width:265px;gap:4px;padding:6px}.cx-gem{font-size:20px}.cx-m3top{max-width:265px}.cx-m3stat{padding:5px}.cx-m3stat b{font-size:17px}.st-game-help{font-size:10px}.cx-play{gap:8px}.st-world-scroll{gap:8px}.st-destinations button{padding:8px 10px}}
 @media(max-width:760px){.st-item{min-height:34px;font-size:11px}.st-page-heading{padding-right:40px}#cx-gear{width:36px;height:36px}.st-outfit strong{font-size:11px}.st-setting input,.st-setting select{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.cx-gem,.cx-primary{transition:none!important}}
+@media(min-width:931px){body[data-screen=workshop] #cx-back{left:432px;top:76px}}
+@media(min-width:761px) and (max-width:930px){body[data-screen=workshop] #cx-back{left:322px;top:76px}}
+
+body:not([data-screen=workshop]){color-scheme:light}

@@ -109,5 +109,5 @@ window.BearLabStudio={install(api){
     if(!content.contains(document.activeElement))content.querySelector('button')?.focus();
   }
   save();api.set3d(prefs.bear3d);shell();
-  return {bear:(c,s,t,p)=>art(c||api.config(),!!t,false,p),home,wardrobe,world,admin,sync,icon};
+  return {bear:(c,s,t,p)=>{if(!p&&(s||[]).some(it=>{const current=api.catalog.find(x=>x.id===it.id);return !current||current.color!==it.color}))return e('span',{class:'st-preview-pending st-thumb',role:'img','aria-label':'Историческая комплектация — исходные параметры сохранены'},[icon('bear'),'Состав сохранён']);return art(c||api.config(),!!t,false,p)},home,wardrobe,world,admin,sync,icon};
 }};

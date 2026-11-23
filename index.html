@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TheBearLab Мастерская</title>
 <meta name="theme-color" content="#191b3f">
+<link rel="icon" href="icon-192.png" type="image/png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1588,6 +1589,7 @@ function applyBearCode(){
   }
 }
 function treatBear(){
+  cxToast('Мишка рад угощению');
   bounce=1;wave=1;play('jump');say('Ням-ням! 🍓');
   const face=document.querySelector('.cx-hero .cx-flat');
   if(document.body.dataset.motion!=='off'&&face&&face.animate&&!matchMedia('(prefers-reduced-motion:reduce)').matches) face.animate([{transform:'scale(1)'},{transform:'scale(1.08) rotate(-5deg)'},{transform:'scale(1)'}],{duration:450});
