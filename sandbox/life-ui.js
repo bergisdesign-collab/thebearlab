@@ -10,7 +10,7 @@ window.BearLabLife={install(api){
   const fmt=n=>new Intl.NumberFormat('ru-RU').format(n);
   let busy=false;
   const btn=(label,fn,cls='lf-button',disabled=false)=>e('button',{type:'button',class:cls,'aria-label':label,disabled:disabled?'':null,onclick:ev=>fn(ev.currentTarget)},label);
-  function itemIcon(id){const i=['water','apple','burger','soap'].indexOf(id);return e('span',{class:'lf-item-icon lf-atlas','aria-hidden':'true',style:'--lx:'+(i%2*100)+'%;--ly:'+(Math.floor(i/2)*100)+'%'})}
+  function itemIcon(id){const icons={water:'care-water.svg',apple:'care-apple.svg',burger:'care-burger.svg',soap:'care-soap.svg'};return e('img',{class:'lf-item-icon','aria-hidden':'true',alt:'',src:'assets/demo/'+(icons[id]||icons.water)})}
   function wallet(){const s=current();return e('div',{class:'lf-wallet'},[e('span',{},[gi('coin'),text('b',fmt(s.coins)),text('small','монет')]),e('span',{},[gi('star'),text('b',fmt(s.earnedStars)),text('small','заработано')])])}
   function meter(label,value,key){return e('div',{class:'lf-meter lf-'+key},[text('span',label),text('b',value+' / 100'),e('div',{role:'progressbar','aria-label':label,'aria-valuemin':0,'aria-valuemax':100,'aria-valuenow':value},e('i',{style:'width:'+value+'%'}))])}
   function show(title,children){api.open(title,children,'lf-sheet')}
