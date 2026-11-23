@@ -5,7 +5,7 @@ const OUT=process.env.BEARLAB_QA_DIR||'/tmp/bearlab-responsive-qa';fs.mkdirSync(
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.BEARLAB_CHROME||undefined,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader']});
  const results=[];
- for(const [name,width,height] of [['phone',390,844],['small',360,640],['compact-landscape',667,375],['landscape',844,390],['tablet',768,1024],['tablet-landscape',1024,768],['desktop',1920,1080],['wide',2560,1080]]){
+ for(const [name,width,height] of [['phone',390,844],['small',360,640],['compact-landscape',667,375],['landscape',844,390],['tablet',768,1024],['tablet-landscape',1024,768],['desktop',1920,1080],['wide',2560,1080]].filter(([name])=>!process.env.BEARLAB_QA_CASES||process.env.BEARLAB_QA_CASES.split(',').includes(name))){
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   const button=label=>page.getByRole('button',{name:label,exact:true});
   const snap=label=>page.screenshot({path:path.join(OUT,`${name}-${label}.png`),animations:'disabled'});
