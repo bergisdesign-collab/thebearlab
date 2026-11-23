@@ -209,8 +209,116 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
 </style>
 <link rel="stylesheet" href="sandbox/workshop.css">
 <link rel="stylesheet" href="sandbox/order-ui.css">
+<style>
+/* Concept layer: Дом / Гардероб over the live stage. Workshop chrome stays in the DOM and returns as-is. */
+#concept{position:fixed;inset:0;z-index:24;display:flex;justify-content:center;pointer-events:none}
+.cx-col{width:min(420px,100%);height:100%;display:flex;flex-direction:column;min-height:0}
+#cx-screen,.cx-view{flex:1;display:flex;flex-direction:column;min-height:0}
+.cx-view{overflow:hidden}
+.cx-hud,.cx-appbar,.cx-dock,.cx-actions,.cx-nav{pointer-events:auto}
+.cx-hero{pointer-events:none;flex:1 1 auto;min-height:96px;display:flex;align-items:flex-start;justify-content:center}
+.cx-hud{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:calc(12px + env(safe-area-inset-top)) max(58px, calc(12px + env(safe-area-inset-right))) 0 max(14px, env(safe-area-inset-left))}
+.cx-lvl{display:flex;align-items:center;gap:8px;background:#4a3178;color:#fff4e0;border-radius:999px;padding:5px 12px 5px 5px;font-weight:800;font-size:14px}
+.cx-av{width:32px;height:32px;border-radius:50%;background:#f3ecdf;display:grid;place-items:center;font-size:18px}
+.cx-bar{width:64px;height:8px;border-radius:99px;background:#2a1848;overflow:hidden}
+.cx-bar i{display:block;width:62%;height:100%;background:#ffce3a;border-radius:99px}
+.cx-coins{background:#4a3178;color:#fff4e0;border-radius:999px;padding:8px 12px;font-weight:800;font-size:15px;display:flex;align-items:center;gap:6px}
+.cx-appbar{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;padding:calc(12px + env(safe-area-inset-top)) 8px 0}
+.cx-appbar h1{margin:0;text-align:center;font-family:var(--f-display);font-size:20px;font-weight:800;color:#fff4e0}
+.cx-dock{flex:0 1 auto;display:flex;flex-direction:column;min-height:0;max-height:68%}
+.cx-actions{padding:8px 16px 10px;display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:0}
+.cx-primary{width:100%;min-height:72px;border:0;border-radius:22px;background:#ffce3a;color:#3a2270;
+  font-family:var(--f-display);font-weight:800;font-size:20px;box-shadow:0 5px 0 #e0a818;cursor:pointer}
+.cx-primary:active{transform:translateY(3px);box-shadow:0 2px 0 #e0a818}
+.cx-secondary{width:100%;min-height:52px;border:0;border-radius:16px;background:#f3ecdf;color:#3a2270;font-weight:800;font-size:16px;cursor:pointer}
+.cx-secondary:active{transform:translateY(1px)}
+.cx-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.cx-chip{background:#43d6e0;color:#06343a;border-radius:999px;padding:6px 12px;font-weight:800;font-size:13px}
+.cx-chip.quiet{background:rgba(243,236,223,.2);color:#fff4e0}
+.cx-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cx-card{border:3px solid transparent;background:#f3ecdf;color:#3a2270;border-radius:18px;padding:10px 6px 12px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font:inherit;min-height:112px}
+.cx-card[aria-pressed="true"]{border-color:#43d6e0;box-shadow:0 0 0 2px rgba(67,214,224,.45)}
+.cx-card:active{transform:scale(.98)}
+.cx-emo{width:44px;height:44px;border-radius:14px;background:#efe4d4;display:grid;place-items:center;font-size:24px}
+.cx-name{font-weight:800;font-size:14px;line-height:1.1}
+.cx-price{font-weight:800;font-size:12px;color:#5c4d82}
+.cx-nav{flex:none;display:flex;gap:4px;background:#4a3178;padding:8px 6px calc(8px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0}
+.cx-nav button{flex:1;border:0;background:transparent;color:#c9b8e8;font:inherit;font-size:11px;font-weight:800;
+  display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border-radius:14px;cursor:pointer}
+.cx-nav button span{font-size:20px;line-height:1}
+.cx-nav button[aria-current="page"]{background:#e4d4ff;color:#3a2270}
+.cx-bear-off{display:none;margin-top:18vh;background:rgba(42,24,72,.72);color:#fff4e0;font-weight:800;padding:12px 16px;border-radius:14px}
+body[data-bear="off"] .cx-bear-off{display:block}
+body[data-bear="off"] .stage canvas{opacity:0;pointer-events:none}
+body.beauty .stage{background:
+  radial-gradient(80% 42% at 50% 100%, rgba(255,206,58,.2), transparent 62%),
+  radial-gradient(120% 85% at 50% 16%, #7b5bc8, #4a2f86 50%, #2c1a4e)}
+body[data-screen="home"] .app,
+body[data-screen="wardrobe"] .app{display:block!important;height:100%}
+body[data-screen="home"] .stage,
+body[data-screen="wardrobe"] .stage{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 28%, #6d4cb8, #4a2f86 46%, #3a2568)}
+body.beauty[data-screen="home"] .stage,
+body.beauty[data-screen="wardrobe"] .stage{background:
+  radial-gradient(80% 42% at 50% 100%, rgba(255,206,58,.2), transparent 62%),
+  radial-gradient(120% 85% at 50% 16%, #7b5bc8, #4a2f86 50%, #2c1a4e)}
+body[data-screen="home"] .top,
+body[data-screen="home"] .rail,
+body[data-screen="home"] .sheetwrap,
+body[data-screen="home"] .stage .want,
+body[data-screen="home"] .stage .tools,
+body[data-screen="home"] .stage .done,
+body[data-screen="home"] .stage .badge,
+body[data-screen="wardrobe"] .top,
+body[data-screen="wardrobe"] .rail,
+body[data-screen="wardrobe"] .sheetwrap,
+body[data-screen="wardrobe"] .stage .want,
+body[data-screen="wardrobe"] .stage .tools,
+body[data-screen="wardrobe"] .stage .done,
+body[data-screen="wardrobe"] .stage .badge{display:none!important}
+body[data-screen="home"] .stage .bubble,
+body[data-screen="wardrobe"] .stage .bubble{top:calc(88px + env(safe-area-inset-top, 0px))!important;pointer-events:none}
+body[data-screen="home"] .reference,
+body[data-screen="wardrobe"] .reference{inset:72px 16px 42%!important}
+#cx-gear{position:fixed;z-index:70;top:calc(10px + env(safe-area-inset-top));right:max(10px, env(safe-area-inset-right));
+  width:40px;height:40px;border:0;border-radius:12px;background:#f3ecdf;color:#3a2270;font-size:20px;cursor:pointer;box-shadow:0 4px 0 rgba(42,24,72,.28)}
+#cx-back{position:fixed;z-index:60;left:max(12px, env(safe-area-inset-left));top:calc(72px + env(safe-area-inset-top));
+  height:44px;padding:0 14px;border:0;border-radius:14px;background:#43d6e0;color:#06343a;font:inherit;font-weight:800;font-size:16px;
+  box-shadow:0 4px 0 #27b3bd;cursor:pointer}
+#cx-back:active{transform:translateY(2px);box-shadow:0 2px 0 #27b3bd}
+#cx-admin{position:fixed;inset:0;z-index:80;background:rgba(20,10,40,.5);display:flex;align-items:flex-end;justify-content:center}
+.cx-sheet{width:min(440px,100%);max-height:min(86dvh,640px);overflow:auto;background:#4a3178;color:#fff4e0;
+  border-radius:22px 22px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom));box-shadow:0 -16px 40px rgba(0,0,0,.35)}
+.cx-grab{width:44px;height:5px;border-radius:99px;background:rgba(255,255,255,.35);margin:4px auto 12px}
+.cx-sheet h3{margin:0 0 12px;font-family:var(--f-display);font-size:20px}
+.cx-tog{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f3ecdf;color:#3a2270;border-radius:16px;padding:12px 12px 12px 14px;margin-bottom:10px;font-weight:800}
+.cx-seg{display:flex;background:#e7dccb;border-radius:12px;padding:3px;flex:none}
+.cx-seg button{border:0;background:transparent;color:#5c4d82;font:inherit;font-weight:800;border-radius:9px;padding:8px 12px;cursor:pointer}
+.cx-seg button[aria-pressed="true"]{background:#43d6e0;color:#06343a}
+.cx-sheet .cx-primary{margin-top:6px}
+#cx-toast{position:fixed;left:50%;top:22%;transform:translateX(-50%) translateY(8px);background:#2a1848;color:#fff4e0;
+  padding:12px 16px;border-radius:14px;font-weight:800;opacity:0;pointer-events:none;z-index:90;transition:opacity .2s,transform .2s;max-width:min(360px,calc(100% - 32px));text-align:center}
+#cx-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#concept button:focus-visible,#cx-gear:focus-visible,#cx-back:focus-visible,#cx-admin button:focus-visible{outline:3px solid #43d6e0;outline-offset:2px}
+@media (min-width:520px){
+  .cx-hud{padding-right:14px}
+  .cx-appbar{display:flex;justify-content:center}
+  .cx-nav{margin:0 12px 12px;border-radius:22px}
+}
+@media (max-width:540px){
+  body[data-screen="workshop"] #cx-gear{top:calc(104px + env(safe-area-inset-top))}
+  body[data-screen="workshop"] #cx-back{top:calc(104px + env(safe-area-inset-top))}
+}
+@media (min-width:541px){
+  body[data-screen="workshop"] #cx-gear{top:calc(74px + env(safe-area-inset-top))}
+}
+@media (prefers-reduced-motion:reduce){
+  .cx-primary:active,.cx-secondary:active,.cx-card:active,#cx-back:active{transform:none}
+}
+</style>
 </head>
-<body>
+<body data-screen="home" data-bear="on">
 
 <div class="app" id="app">
   <header class="top">
@@ -259,6 +367,11 @@ input[type=range]{width:100%;accent-color:var(--violet);height:24px}
   </main>
 </div>
 <div class="modal" id="modal" hidden></div>
+<div id="concept"><div class="cx-col"><div id="cx-screen"></div></div></div>
+<button type="button" id="cx-gear" aria-label="Админка">⚙</button>
+<button type="button" id="cx-back" hidden>‹ Дом</button>
+<div id="cx-admin" hidden></div>
+<div id="cx-toast" role="status"></div>
 
 
 <script src="./vendor/three-r147/three.min.js"></script>
@@ -796,8 +909,13 @@ function loop0(){
       a.rotation.z=s*z;a.rotation.x=x});
   }
   if(camGoal){camGoal.t=Math.min(1,camGoal.t+dt*2.2);const k=1-Math.pow(1-camGoal.t,3);controls.target.lerp(camGoal.target,k*.25+.02);camera.position.lerp(camGoal.pos,k*.25+.02);if(camGoal.t>=1)camGoal=null}
-  const app=document.getElementById('app');const wantOff=isPhone()&&app.classList.contains('sheet-open')?document.getElementById('sheet').getBoundingClientRect().height*.38:0;
-  if(Math.abs(wantOff-viewOff)>.5){viewOff+=(wantOff-viewOff)*.18;const w=stage.clientWidth,h=stage.clientHeight;camera.setViewOffset(w,h,0,viewOff,w,h)}
+  const app=document.getElementById('app');
+  const sheetOff=isPhone()&&app.classList.contains('sheet-open')?document.getElementById('sheet').getBoundingClientRect().height*.38:0;
+  const dockEl=document.getElementById('cx-dock');
+  const onHub=document.body.dataset.screen==='home'||document.body.dataset.screen==='wardrobe';
+  const dockOff=onHub&&dockEl?dockEl.getBoundingClientRect().height*.42:0;
+  const wantOff=Math.max(sheetOff,dockOff);
+  if(Math.abs(wantOff-viewOff)>.5){viewOff+=(wantOff-viewOff)*.18;const w=stage.clientWidth,h=stage.clientHeight;if(w&&h){if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else{viewOff=0;camera.clearViewOffset()}}}
   controls.update();renderer.render(scene,camera);
 }
 const isPhone=()=>matchMedia('(max-width:760px)').matches;
@@ -1168,6 +1286,114 @@ document.getElementById('undo').onclick=()=>goHist(-1);document.getElementById('
 /* ============ START ============ */
 paintAll();makeSets();renderRail();resize();build();focusCam(false);if(renderer && cfg.model!=='parts')loadTeddy();addEventListener('resize',resize);renderPanel();updPrice();updHist();
 document.getElementById('loading').remove();
+
+/* ============ CONCEPT: Дом / Гардероб ============ */
+let beautyOn=false,bearOn=true,cxReturn='home',toastT=0;
+const OUTFIT_EMOJI={База:'🧸',Худи:'🧥',Сарафан:'👗'};
+function cxToast(msg){const t=document.getElementById('cx-toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1700)}
+function applyFlags(){document.body.classList.toggle('beauty',beautyOn);document.body.dataset.bear=bearOn?'on':'off'}
+function relayout(){requestAnimationFrame(()=>requestAnimationFrame(resize))}
+function outfitName(){const hit=OUTFITS.find(o=>sameClothes(cfg.clothes,o.clothes));return hit?hit.name:'Свой'}
+function treatBear(){bounce=1;wave=1;play('jump');say('Ням-ням! 🍓')}
+function bottomNav(active){
+  return el('nav',{class:'cx-nav','aria-label':'Разделы'},[['home','🏠','Дом'],['wardrobe','🧥','Гардероб'],['world','🗺️','Мир'],['games','🎮','Игры']].map(([id,icon,label])=>{
+    const props={type:'button',onclick:()=>showHub(id)};
+    if(id===active)props['aria-current']='page';
+    return el('button',props,[el('span',{'aria-hidden':'true'},icon),label]);
+  }));
+}
+function conceptHud(){
+  return el('div',{class:'cx-hud'},[
+    el('div',{class:'cx-lvl'},[el('span',{class:'cx-av','aria-hidden':'true'},'🧸'),'Ур. 12',el('span',{class:'cx-bar','aria-hidden':'true'},el('i'))]),
+    el('div',{class:'cx-coins'},'🟡 420')
+  ]);
+}
+function conceptHero(){return el('div',{class:'cx-hero'},el('p',{class:'cx-bear-off'},'3D-мишка выключен'))}
+function homeView(){
+  return el('div',{class:'cx-view','data-concept':'home'},[
+    conceptHud(),conceptHero(),
+    el('div',{class:'cx-dock',id:'cx-dock'},[
+      el('div',{class:'cx-actions'},[
+        el('button',{class:'cx-primary',type:'button',onclick:treatBear},'🍓 Угостить'),
+        el('button',{class:'cx-secondary',type:'button',onclick:showWorkshop},'Изменить мишку')
+      ]),
+      bottomNav('home')
+    ])
+  ]);
+}
+function wardrobeView(){
+  const ids=cfg.clothes||[];
+  const labels=ids.map(id=>CLOTHES.find(a=>a.id===id)?.label).filter(Boolean);
+  const chips=el('div',{class:'cx-chips'},(labels.length?labels:['Без одежды']).map(label=>el('span',{class:labels.length?'cx-chip':'cx-chip quiet'},label)));
+  const cards=el('div',{class:'cx-cards',role:'group','aria-label':'Образы'},OUTFITS.map(o=>{
+    const on=sameClothes(cfg.clothes,o.clothes);
+    return el('button',{class:'cx-card',type:'button','aria-pressed':String(on),onclick(){
+      set('clothes',o.clothes.slice());bounce=1;wave=1;say(o.name+'!');renderConcept();
+    }},[
+      el('span',{class:'cx-emo','aria-hidden':'true'},OUTFIT_EMOJI[o.name]||'🧸'),
+      el('span',{class:'cx-name'},o.name),
+      el('span',{class:'cx-price'},fmt(clothesTotal(o.clothes))+' ₽')
+    ]);
+  }));
+  return el('div',{class:'cx-view','data-concept':'wardrobe'},[
+    el('div',{class:'cx-appbar'},[el('span'),el('h1',{},'Гардероб'),el('span')]),
+    conceptHero(),
+    el('div',{class:'cx-dock',id:'cx-dock'},[
+      el('div',{class:'cx-actions'},[
+        chips,cards,
+        el('button',{class:'cx-primary',type:'button',onclick:()=>cxToast(outfitName()+' на мишке. Экран «Мой мишка» будет следующим.')},'Посмотреть образ')
+      ]),
+      bottomNav('wardrobe')
+    ])
+  ]);
+}
+function renderConcept(){
+  const screen=document.body.dataset.screen==='wardrobe'?'wardrobe':'home';
+  document.body.dataset.screen=screen;
+  document.getElementById('cx-screen').replaceChildren(screen==='wardrobe'?wardrobeView():homeView());
+}
+function showHub(id){
+  if(id==='world'||id==='games'){cxToast('Скоро');return}
+  if(id!=='home'&&id!=='wardrobe')return;
+  document.body.dataset.screen=id;
+  document.getElementById('concept').hidden=false;
+  document.getElementById('cx-back').hidden=true;
+  renderConcept();
+  relayout();
+}
+function showWorkshop(){
+  const cur=document.body.dataset.screen;
+  if(cur==='home'||cur==='wardrobe')cxReturn=cur;
+  document.body.dataset.screen='workshop';
+  document.getElementById('concept').hidden=true;
+  const back=document.getElementById('cx-back');
+  back.hidden=false;
+  back.textContent=cxReturn==='wardrobe'?'‹ Гардероб':'‹ Дом';
+  relayout();
+}
+function closeAdmin(){const box=document.getElementById('cx-admin');box.hidden=true;box.replaceChildren()}
+function openAdmin(){
+  const box=document.getElementById('cx-admin');
+  const seg=(on,pick)=>el('div',{class:'cx-seg'},[
+    el('button',{type:'button','aria-pressed':String(!on),onclick(){pick(false);openAdmin()}},'выкл'),
+    el('button',{type:'button','aria-pressed':String(on),onclick(){pick(true);openAdmin()}},'вкл')
+  ]);
+  box.replaceChildren(el('div',{class:'cx-sheet',role:'dialog','aria-modal':'true','aria-label':'Админка'},[
+    el('div',{class:'cx-grab','aria-hidden':'true'}),
+    el('h3',{},'Админка'),
+    el('div',{class:'cx-tog'},['Красота',seg(beautyOn,v=>{beautyOn=v;applyFlags()})]),
+    el('div',{class:'cx-tog'},['3D-мишка',seg(bearOn,v=>{bearOn=v;applyFlags()})]),
+    el('button',{class:'cx-primary',type:'button',onclick(){closeAdmin();showWorkshop()}},'Открыть конфигуратор')
+  ]));
+  box.hidden=false;
+}
+document.getElementById('cx-gear').onclick=()=>{const box=document.getElementById('cx-admin');if(box.hidden)openAdmin();else closeAdmin()};
+document.getElementById('cx-admin').addEventListener('click',e=>{if(e.target.id==='cx-admin')closeAdmin()});
+document.getElementById('cx-back').onclick=()=>showHub(cxReturn);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('cx-admin').hidden){e.preventDefault();closeAdmin()}});
+applyFlags();
+renderConcept();
+
 if (renderer) loop();
 try{if('serviceWorker' in navigator&&!/claudeusercontent|claude\.ai/.test(location.hostname)&&window.isSecureContext&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(x){}
 })();
