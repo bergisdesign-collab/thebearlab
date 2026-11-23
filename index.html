@@ -2013,6 +2013,7 @@ function worldView(){
   });
   return el('div',{class:'cx-view','data-concept':'world'},[conceptHud(),plaza,bottomNav('world')]);
 }
+let gemFocus=0;
 function gamesView(){
   if(!M.board) m3new();
   const grid=el('div',{class:'cx-grid',style:'grid-template-columns:repeat('+M.cols+',1fr)',role:'group','aria-label':'Поле'});
@@ -2025,7 +2026,12 @@ function gamesView(){
       type:'button',
       'aria-pressed':String(!!on),
       'aria-label':document.body.dataset.theme==='game'?['звезда','зелье','монета','сердце','мёд'][gem]:GEM_NAME[gem]||'фишка',
-      onclick:()=>tapGem(r,c)
+      tabindex:r*M.cols+c===gemFocus?'0':'-1',
+      'data-cell':r*M.cols+c,
+      'aria-description':'Строка '+(r+1)+', столбец '+(c+1)+'. Стрелки — перемещение, Enter — выбор.',
+      onfocus:ev=>{gemFocus=r*M.cols+c;grid.querySelectorAll('button').forEach(n=>n.tabIndex=n===ev.target?0:-1)},
+      onkeydown:ev=>{const next={ArrowLeft:r*M.cols+Math.max(0,c-1),ArrowRight:r*M.cols+Math.min(M.cols-1,c+1),ArrowUp:Math.max(0,r-1)*M.cols+c,ArrowDown:Math.min(M.rows-1,r+1)*M.cols+c,Home:r*M.cols,End:r*M.cols+M.cols-1}[ev.key];if(next!==undefined){ev.preventDefault();grid.querySelector('[data-cell="'+next+'"]')?.focus()}},
+      onclick:()=>{gemFocus=r*M.cols+c;tapGem(r,c);document.querySelector('.cx-grid [data-cell="'+gemFocus+'"]')?.focus({preventScroll:true})}
     },studio.gem(gem)||M.gems[gem]||'•'));
   }
   return el('div',{class:'cx-view','data-concept':'games'},[

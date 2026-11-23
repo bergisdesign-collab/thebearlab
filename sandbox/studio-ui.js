@@ -1,11 +1,12 @@
 /* Presentation layer over Dima's configuration and order engine. No duplicate app state. */
 window.BearLabStudio={install(api){
   const e=(tag,attrs={},children=[])=>{const n=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k.startsWith('on'))n.addEventListener(k.slice(2),v);else if(v!=null)n.setAttribute(k,String(v))}for(const c of [children].flat(Infinity)){if(c!=null)n.append(c instanceof Node?c:document.createTextNode(String(c)))}return n};
-  const paths={home:'M3 10 12 3l9 7v10H3Z M9 20v-7h6v7',wardrobe:'m8 3-5 4 3 5 2-1v10h8V11l2 1 3-5-5-4c0 4-8 4-8 0Z',workshop:'m14 4 6 6-10 10H4v-6Z M11 7l6 6',world:'M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2Z M9 3v16 M15 5v16',games:'M7 7h10c3 0 4 3 4 7s-2 5-5 1H8c-3 4-5 3-5-1s1-7 4-7Z M7 10v4 M5 12h4 M16 11h.01 M18 13h.01',orders:'M6 3h12v18H6Z M9 8h6 M9 12h6 M9 16h3',cart:'M3 4h2l2 12h11l3-9H6 M8 20h.01 M17 20h.01',settings:'M9 3h6l1 4 4 1v7l-4 1-1 5H9l-1-5-4-1V8l4-1Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',arrow:'M5 12h14 M13 6l6 6-6 6',heart:'M12 20 4 12C-2 5 7 0 12 7 17 0 26 5 20 12Z',spark:'m12 3 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z',bear:'M6 8C1 7 2 1 6 3l2 3c3-2 5-2 8 0l2-3c4-2 5 4 0 5 6 12-18 12-12 0Z M8 12h.01 M16 12h.01 M10 15q2 2 4 0'};
+  const paths={comfort:'M4 7h16 M4 17h16 M8 4v6 M16 14v6',home:'M3 10 12 3l9 7v10H3Z M9 20v-7h6v7',wardrobe:'m8 3-5 4 3 5 2-1v10h8V11l2 1 3-5-5-4c0 4-8 4-8 0Z',workshop:'m14 4 6 6-10 10H4v-6Z M11 7l6 6',world:'M3 5l6-2 6 2 6-2v16l-6 2-6-2-6 2Z M9 3v16 M15 5v16',games:'M7 7h10c3 0 4 3 4 7s-2 5-5 1H8c-3 4-5 3-5-1s1-7 4-7Z M7 10v4 M5 12h4 M16 11h.01 M18 13h.01',orders:'M6 3h12v18H6Z M9 8h6 M9 12h6 M9 16h3',cart:'M3 4h2l2 12h11l3-9H6 M8 20h.01 M17 20h.01',settings:'M9 3h6l1 4 4 1v7l-4 1-1 5H9l-1-5-4-1V8l4-1Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',arrow:'M5 12h14 M13 6l6 6-6 6',heart:'M12 20 4 12C-2 5 7 0 12 7 17 0 26 5 20 12Z',spark:'m12 3 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z',bear:'M6 8C1 7 2 1 6 3l2 3c3-2 5-2 8 0l2-3c4-2 5 4 0 5 6 12-18 12-12 0Z M8 12h.01 M16 12h.01 M10 15q2 2 4 0'};
   const icon=name=>{const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','st-icon');s.setAttribute('aria-hidden','true');const p=document.createElementNS(s.namespaceURI,'path');p.setAttribute('d',paths[name]||paths.spark);s.append(p);return s};
   const button=(text,fn,cls='cx-primary',ico)=>e('button',{type:'button',class:cls,onclick:fn},[ico?icon(ico):null,text]);
-  let prefs={theme:'game',motion:true,bear3d:false};try{Object.assign(prefs,JSON.parse(localStorage.getItem('bearlab.studio.prefs')||'{}'))}catch(_){}
-  const save=()=>{try{localStorage.setItem('bearlab.studio.prefs',JSON.stringify(prefs))}catch(_){}document.body.dataset.theme=prefs.theme==='game'?'game':'studio';document.body.dataset.motion=prefs.motion?'on':'off'};
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  let prefs={theme:'game',motion:!reducedMotion.matches,bear3d:false,largeTargets:false,hand:'right'};try{Object.assign(prefs,JSON.parse(localStorage.getItem('bearlab.studio.prefs')||'{}'))}catch(_){}
+  const save=()=>{try{localStorage.setItem('bearlab.studio.prefs',JSON.stringify(prefs))}catch(_){}document.body.dataset.theme=prefs.theme==='game'?'game':'studio';document.body.dataset.motion=prefs.motion&&!reducedMotion.matches?'on':'off';document.body.dataset.targets=prefs.largeTargets?'large':'normal';document.body.dataset.hand=prefs.hand==='left'?'left':'right'};
   const theme=v=>{prefs.theme=v;save();api.set3d(prefs.bear3d);shell();api.render();};
   const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' ₽';
   const outfitName=c=>(c.clothes||[]).includes('hoodie')?'Худи':(c.clothes||[]).includes('sundress')?'Сарафан':(c.clothes||[]).includes('tshirt')?'Футболка':'Базовый образ';
@@ -100,7 +101,9 @@ window.BearLabStudio={install(api){
       e('div',{class:'st-dialog-head'},[e('div',{},[e('h3',{},'Настройки прототипа'),e('p',{},'Одни данные. Два способа посмотреть на игру.')]),e('button',{type:'button',class:'st-dialog-close','aria-label':'Закрыть настройки',onclick:close},'×')]),
       setting('Интерфейс','Спокойная студия или игровой характер.',segment([['studio','Студия'],['game','Игровой']],prefs.theme,v=>{theme(v);admin()})),
       setting('Персонаж','Иллюстрация для показа или техническая 3D-модель.',segment([['2d','2D'],['3d','3D']],api.is3d()?'3d':'2d',v=>{prefs.bear3d=v==='3d';save();api.set3d(prefs.bear3d);api.render();admin()})),
-      setting('Анимации','Мягкие переходы и реакция мишки.',segment([['on','Вкл'],['off','Выкл']],prefs.motion?'on':'off',v=>{prefs.motion=v==='on';save();admin()})),
+      setting('Анимации',reducedMotion.matches?'Движение уменьшено настройкой вашего устройства.':'Мягкие переходы и реакция мишки.',segment([['on','Вкл'],['off','Выкл']],prefs.motion?'on':'off',v=>{prefs.motion=v==='on';save();admin()})),
+      setting('Крупнее кнопки','Больше места для нажатия и меньше вещей в одном ряду.',segment([['normal','Обычно'],['large','Крупнее']],prefs.largeTargets?'large':'normal',v=>{prefs.largeTargets=v==='large';save();admin()})),
+      setting('Ведущая рука','В горизонтальной игре действия располагаются ближе к выбранной руке.',segment([['left','Левая'],['right','Правая']],prefs.hand,v=>{prefs.hand=v;save();admin()})),
       setting('Имя мишки','Отображается в вашем заказе.',name),setting('Размер','Демонстрационная комплектация.',size),
       e('p',{class:'st-dialog-section'},'Карта экранов'),e('div',{class:'st-screen-map'},scenes.map(([id,label])=>button(label,()=>jump(id),'',null))),
       e('p',{class:'st-disclosure'},'Демозаявки сохраняются только в этом браузере. Для обмена — JSON. Иллюстрации созданы ИИ: проба, не утверждено. Изготовимость и цены требуют согласования с производством.')
@@ -109,7 +112,8 @@ window.BearLabStudio={install(api){
     content.addEventListener('keydown',ev=>{if(ev.key==='Tab'){const list=[...content.querySelectorAll('button,input,select,textarea')].filter(n=>!n.disabled);const first=list[0],last=list[list.length-1];if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus()}else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus()}}});
     if(!content.contains(document.activeElement))content.querySelector('button')?.focus();
   }
-  const game=window.BearLabGame.install({...api,e,art,go,icon});
+  const game=window.BearLabGame.install({...api,e,art,go,icon,preferences:()=>({...prefs,motion:prefs.motion&&!reducedMotion.matches,motionLocked:reducedMotion.matches}),comfort:update=>{Object.assign(prefs,update);save()}});
+  reducedMotion.addEventListener('change',save);
   save();api.set3d(prefs.bear3d);shell();
   return {gem:i=>prefs.theme==='game'?game.gem(i):null,reward:game.reward,bottom:id=>prefs.theme==='game'?game.nav(id==='wardrobe'?'collection':id):null,bear:(c,s,t,p)=>{if(!p&&(s||[]).some(it=>{const current=api.catalog.find(x=>x.id===it.id);return !current||current.color!==it.color}))return e('span',{class:'st-preview-pending st-thumb',role:'img','aria-label':'Историческая комплектация — исходные параметры сохранены'},[icon('bear'),'Состав сохранён']);return art(c||api.config(),!!t,false,p)},home,wardrobe,world,admin,sync,icon};
 }};

@@ -111,8 +111,27 @@ window.BearLabGame={install(api){
       ...[['workshop','Лаборатория','Цвет и характер'],['wardrobe','Студия стиля','Примерьте новый образ'],['games','Игровой клуб','Три в ряд']].map(([id,l,desc])=>b(l,()=>navigate(id),'gm-place gm-place-'+id,[gi(id),e('span',{},[e('strong',{},l),e('small',{},desc)]),e('b',{},'›')]))
     ]),e('p',{class:'gm-map-hint'},'Выберите место — приключение уже ждёт'),e('div',{class:'gm-world-guide'},[['workshop','Лаборатория','Создать своего мишку'],['wardrobe','Студия стиля','Найти любимый образ'],['games','Игровой клуб','Собрать три в ряд']].map(([id,label,desc])=>b(label,()=>navigate(id),'gm-world-card',[gi(id),e('strong',{},label),e('small',{},desc)]))),nav('')
   ])}
+  function comfort(){
+    const prefs=api.preferences();
+    const toggle=(label,key,on,off)=>b(label,()=>{api.comfort({[key]:!prefs[key]});comfort();document.querySelector('.gm-sheet [aria-label="'+label+'"]')?.focus()},'gm-comfort-option',[e('span',{},label),e('b',{},prefs[key]?on:off)]);
+    open('Удобно играть',[
+      prefs.motionLocked?e('p',{class:'gm-note'},'Меньше движения включено в настройках вашего устройства.'):toggle('Меньше движения','motion','Выкл','Вкл'),
+      toggle('Крупнее кнопки','largeTargets','Вкл','Выкл'),
+      b('Ведущая рука',()=>{api.comfort({hand:prefs.hand==='left'?'right':'left'});comfort();document.querySelector('.gm-sheet [aria-label="Ведущая рука"]')?.focus()},'gm-comfort-option',[e('span',{},'Ведущая рука'),e('b',{},prefs.hand==='left'?'Левая':'Правая')]),
+      e('p',{class:'gm-note'},'Настройки сохраняются на этом устройстве. Ведущая рука меняет расположение кнопок в горизонтальной игре.'),
+      e('div',{class:'gm-key-guide'},[e('h3',{},'С клавиатурой'),...[
+        ['Tab / Shift + Tab','Следующая / предыдущая кнопка'],['Enter / Пробел','Нажать выбранную кнопку'],['Стрелки','Перемещение по полю «Три в ряд»'],['Alt + 1 / 2 / 3 / 4','Кормить / играть / одеть / мир'],['Alt + Home','Домой'],['Esc','Закрыть окно']
+      ].map(([key,label])=>e('p',{},[e('kbd',{},key),e('span',{},label)]))])
+    ]);
+  }
+  document.addEventListener('keydown',ev=>{
+    if(document.body.dataset.theme!=='game'||ev.defaultPrevented||ev.repeat||!ev.altKey||ev.ctrlKey||ev.metaKey||ev.shiftKey||ev.isComposing)return;
+    if(document.activeElement?.matches('input,textarea,select,[contenteditable]')||dialog||!document.getElementById('cx-admin').hidden||!document.getElementById('modal').hidden)return;
+    const fn={Digit1:feed,Digit2:()=>navigate('games'),Digit3:()=>navigate('wardrobe'),Digit4:()=>navigate('world'),Home:()=>navigate('home')}[ev.code];
+    if(fn){ev.preventDefault();fn();if(!dialog)document.querySelector('#concept button')?.focus()}
+  });
   let previousScreen;
-  function sync(){const screen=document.body.dataset.screen;if(screen!==previousScreen)document.getElementById('cx-toast')?.classList.remove('on');previousScreen=screen;if(document.body.dataset.theme!=='game')close()}
+  function sync(){if(document.body.dataset.theme==='game'&&!document.querySelector('.gm-comfort-launch')){const launch=b('Удобство и управление',comfort,'gm-comfort-launch',[icon('comfort'),e('span',{},'Удобство')]);document.body.append(launch)}document.querySelector('.gm-comfort-launch')?.toggleAttribute('hidden',document.body.dataset.theme!=='game'||document.body.dataset.screen!=='home');const screen=document.body.dataset.screen;if(screen!==previousScreen)document.getElementById('cx-toast')?.classList.remove('on');previousScreen=screen;if(document.body.dataset.theme!=='game')close()}
   function reward(score){const amount=Math.max(10,Math.min(200,Math.floor(score/10)));pet.coins+=amount;pet.xp+=30;pet.mood=Math.min(100,pet.mood+10);persist();return amount}
   const gem=index=>gi(['star','workshop','coin','heart','honey'][index]);
   return {home,wardrobe,world,sync,close,nav,reward,gem};
