@@ -29,7 +29,7 @@ window.BearLabStudio={install(api){
   }
   function segment(options,current,onPick){return e('div',{class:'st-segment'},options.map(([id,label])=>e('button',{type:'button','aria-pressed':String(current===id),onclick:()=>onPick(id)},label)))}
   const navItems=[['home','Дом'],['workshop','Мастерская'],['wardrobe','Гардероб'],['world','Мир'],['games','Мини-игра']];
-  function go(id){api.closeAdmin();if(id==='workshop')api.workshop();else if(['home','wardrobe','world','games','arcade'].includes(id))api.hub(id);else api.flow(id);sync()}
+  function go(id){api.closeAdmin();if(id==='workshop')api.workshop();else if(['home','wardrobe','world','games','arcade'].includes(id))api.hub(id);else api.flow(id);sync();if(id==='arcade')game.openArcadeLobby()}
   let shellNode;
   function shell(){
     if(!shellNode){shellNode=e('div',{id:'studio-shell'});document.body.append(shellNode)}
