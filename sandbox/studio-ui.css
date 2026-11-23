@@ -59,6 +59,84 @@ body[data-theme=game] .cx-grid{background:#c9b4e8;border-color:#bda3dd;box-shado
 @media(min-width:931px){body[data-screen=workshop] #cx-back{left:432px;top:76px}}
 @media(min-width:761px) and (max-width:930px){body[data-screen=workshop] #cx-back{left:322px;top:76px}}
 
+/* The original Dima editor stays intact; give it the same BearLab room, materials and navigation. */
+body[data-screen=workshop]{
+  --stage-a:#35265b;--stage-b:#241b42;--panel:#fffaf0;--panel-2:#f2e8d8;--line:#e4d7c5;
+  --ink:#3d3154;--muted:#786c89;--sun:#ffc83d;--go:#ffc83d;--go-ink:#35245c;--violet:#775dc2;--cyan:#39c9d0;
+  color-scheme:light;background:#f3ecdf;color:#3d3154
+}
+body[data-screen=workshop] .app{grid-template-columns:78px minmax(300px,352px) minmax(0,1fr);grid-template-rows:68px minmax(0,1fr);gap:0;background:#f3ecdf}
+body[data-screen=workshop] .top{background:#fffaf0;border-color:#e6dbca;padding-inline:22px;box-shadow:0 3px 14px #39254b0c}
+body[data-screen=workshop] .logo img{height:29px}
+body[data-screen=workshop] .logo small{color:#8a7a98}
+body[data-screen=workshop] .work-nav button{border-color:#e6dbca;border-radius:12px;background:#fff;color:#493960;min-height:42px}
+body[data-screen=workshop] .work-nav button:hover{background:#f6efe2;border-color:#d8c7ad}
+body[data-screen=workshop] .ibtn{background:#eee7f8;color:#58427c;border:1px solid #e2d8ef}
+body[data-screen=workshop] .ibtn:disabled{opacity:.3}
+body[data-screen=workshop] .seg{background:#f0eaf6;border:1px solid #e5dced}
+body[data-screen=workshop] .seg button{color:#756986}
+body[data-screen=workshop] .seg button[aria-pressed=true]{background:#735bb4;color:#fff;box-shadow:0 2px 4px #55417d33}
+body[data-screen=workshop] .price{background:#463461;color:#fff8e8;border:1px solid #5a4770;border-radius:14px;padding:9px 14px}
+body[data-screen=workshop] .rail{background:#fffaf0;border-color:#e7dccb;padding:12px 9px;gap:7px}
+body[data-screen=workshop] .rail button{color:#766986;border-radius:15px;min-height:58px;font-weight:750}
+body[data-screen=workshop] .rail button[aria-selected=true]{background:#eee5fa;color:#55407b;box-shadow:inset 0 0 0 1px #d7c9ec}
+body[data-screen=workshop] .rail button svg{width:24px;height:24px}
+body[data-screen=workshop] .panel{background:#fffaf0;border-color:#e7dccb;padding:22px 20px;gap:18px;scrollbar-color:#c9b8dd transparent}
+body[data-screen=workshop] .panel h2{font-family:var(--f-body);font-size:17px;letter-spacing:-.2px;text-transform:none;color:#493960}
+body[data-screen=workshop] .panel h2 .no{background:#f1e8d6;color:#99712a;border-radius:10px}
+body[data-screen=workshop] .grp>label,body[data-screen=workshop] .grp>.lbl{color:#796b8d;letter-spacing:.04em}
+body[data-screen=workshop] .tile{background:#f4eee4;border:1px solid #e6dac8;border-radius:15px;color:#4a3b5b;min-height:72px;transition:transform .15s,background .15s,border-color .15s}
+body[data-screen=workshop] .tile:hover{background:#fff;border-color:#d6c7b5;transform:translateY(-1px)}
+body[data-screen=workshop] .tile[aria-pressed=true]{background:#f4e8bf;border:2px solid #e7bd43;color:#443260;box-shadow:0 2px 8px #b8912630}
+body[data-screen=workshop] .tile .p{color:#977020}
+body[data-screen=workshop] .tile .sub{color:#887c96}
+body[data-screen=workshop] .sw button{border-color:#fff;box-shadow:0 1px 4px #49396022}
+body[data-screen=workshop] .sw button[aria-pressed=true]{outline-color:#775dc2}
+body[data-screen=workshop] .tg{background:#f0eaf6;border-color:#dfd3ed}
+body[data-screen=workshop] .tg[aria-pressed=true]{background:#d8caef}
+body[data-screen=workshop] .tg .knob{background:#fff;box-shadow:0 1px 4px #38264b30}
+body[data-screen=workshop] .chips .chip{background:#f0eaf6;color:#584770}
+body[data-screen=workshop] .chips .chip[aria-pressed=true]{background:#e9ddf8;color:#493365;box-shadow:inset 0 0 0 1px #cbb8e7}
+body[data-screen=workshop] .txt{background:#fff;border:1px solid #dfd4c6;color:#443650}
+body[data-screen=workshop] .txt::placeholder{color:#a79caf}
+body[data-screen=workshop] .preset{background:#f4eee4;border-color:#e7dccb;border-radius:15px;color:#493960}
+body[data-screen=workshop] .preset:hover{border-color:#cbb9df;background:#fff}
+body[data-screen=workshop] .preset span{color:#81748f}
+body[data-screen=workshop] .preset .p{color:#957027}
+body[data-screen=workshop] .stage{background:radial-gradient(ellipse at 52% 37%,#645086 0,#423359 45%,#29213d 100%);}
+body[data-screen=workshop] .stage:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 72%,#f3dca822,transparent 44%),linear-gradient(135deg,#fff2 0 1px,transparent 1px 100%);opacity:.65}
+body[data-screen=workshop] .done{background:#ffc83d;color:#372552;border-radius:16px;box-shadow:0 4px 0 #d69e28,0 8px 24px #21153555;font-family:var(--f-body);font-size:17px}
+body[data-screen=workshop] .rbtn{box-shadow:0 3px 0 #21153566,0 6px 18px #130d2440}
+body[data-screen=workshop] .want form{background:#fffaf0ed;border:1px solid #eadcc7;border-radius:16px;box-shadow:0 8px 30px #16101f33}
+body[data-screen=workshop] .want input{color:#47375a}
+body[data-screen=workshop] .want input::placeholder{color:#978ba1}
+body[data-screen=workshop] .want button{background:#765db7;color:#fff;border-radius:12px}
+body[data-screen=workshop] .want .ex button{background:#fffaf0e8;border-color:#e8dece;color:#655771}
+body[data-screen=workshop] .badge{background:#fffaf0ed;border-color:#ffffff;color:#645775}
+body[data-screen=workshop] .bubble{background:#fffaf0;color:#493960;border:1px solid #e8dece;box-shadow:0 8px 24px #16101f33}
+body[data-screen=workshop] #cx-back{background:#fffaf0;color:#493960;border:1px solid #e7dccb;box-shadow:0 4px 14px #17102033}
+body[data-screen=workshop] .reference figcaption{background:#fffaf0;color:#493960;border-color:#e7dccb;box-shadow:0 5px 18px #160e2430}
+body[data-screen=workshop] .reference figcaption>span{color:#796d87}
+body[data-screen=workshop] .sheetwrap{background:#fffaf0;border-color:#e7dccb}
+body[data-screen=workshop] .grab span{background:#cbbbdc}
+body[data-screen=workshop] .sheet .shot{background:radial-gradient(ellipse at 50% 38%,#645086,#302544)}
+body[data-screen=workshop] .sheet{background:#fffaf0;border-color:#e7dccb;color:#493960}
+body[data-screen=workshop] .sheet h3{color:#493960}
+body[data-screen=workshop] .spec td{border-color:#e8dece}
+body[data-screen=workshop] .spec td:first-child,body[data-screen=workshop] .note{color:#796d87}
+body[data-screen=workshop] .demo{background:#f2e8d8;color:#665a74}
+body[data-screen=workshop] .code{background:#f0eaf6;color:#493960}
+body[data-screen=workshop] .btn.g{background:#eee7f5;color:#594775}
+body[data-screen=workshop] .btn.v{background:#765db7}
+@media(max-width:760px){
+ body[data-screen=workshop] .app{grid-template-rows:66px minmax(0,1fr)}
+ body[data-screen=workshop] .top{background:#fffaf0f5;backdrop-filter:blur(14px)}
+ body[data-screen=workshop] .rail{background:#fffaf0f5;backdrop-filter:blur(14px);border-top:1px solid #e7dccb}
+ body[data-screen=workshop] .sheetwrap{background:#fffaf0f7;backdrop-filter:blur(16px);box-shadow:0 -10px 30px #17102033}
+ body[data-screen=workshop] .sheet-add{background:#ffc83d;color:#372552;border-radius:12px}
+ body[data-screen=workshop] .done{font-size:15px;padding:12px 16px}
+}
+
 body:not([data-screen=workshop]){color-scheme:light}
 /* Wardrobe layers share the illustrated bear's square coordinate space. */
 .st-bear-art{position:relative}
