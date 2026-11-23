@@ -1182,7 +1182,7 @@ function setupGLB(gl,name,quiet){removeGLB(true);const sc=gl.scene||gl.scenes[0]
   const hgt=new THREE.Box3().setFromObject(wrap).getSize(new V3()).y;R.headW=new V3(0,hgt*.78,0);R.height=hgt;
   if(glb.clips.length){const idle=glb.clips.findIndex(c=>/idle|stand|breath/i.test(c.name));playClip(idle>=0?idle:0)}
   glb.k=k;glb.sc=sc;glb.baseY=sc.position.y;rigSetup(glb);
-  applyTint();if(glb.rig){teddyUpdate();R.headW=glb.rig.headWorld();R.height=3.2}focusCam();renderPanel();
+  applyTint();if(glb.rig){teddyUpdate();R.headW=glb.rig.headWorld();R.height=3.2}focusCam();renderPanel();if(document.body.dataset.screen!=='workshop')renderConcept();
   if(!glb.quiet)say(glb.rig?'Плюшевый мишка готов! Попробуй «Движения»':glb.clips.length?`Модель загружена, анимаций: ${glb.clips.length}`:'Модель загружена. Анимаций в файле нет, но кнопки «Движения» работают')}
 function playClip(i){if(!glb||!glb.clips[i])return;const a=glb.mixer.clipAction(glb.clips[i]);if(glb.cur&&glb.cur!==a)glb.cur.fadeOut(.35);a.reset().setEffectiveWeight(1).fadeIn(.35).play();glb.cur=a;glb.curI=i;if(tab==='moves'||tab==='model')renderPanel()}
 function removeGLB(silent){if(!glb)return;if(glb.rig)disposeRes(glb.rig.res);scene.remove(glb.wrap);glb.mixer.stopAllAction();glb.wrap.traverse(o=>{if(o.isMesh){o.geometry.dispose();[].concat(o.material).forEach(m=>{if(!m)return;for(const k in m)if(m[k]&&m[k].isTexture)m[k].dispose();m.dispose()})}});glb=null;if(bear)bear.visible=true;
@@ -1197,7 +1197,7 @@ function disposeRes(r){if(!r)return;r.GEOS.forEach(g=>g.dispose());r.MATS.forEac
 function loadTeddy(){if(!renderer || !THREE.GLTFLoader){say('Загрузчик моделей не загрузился');return}
   fetch('teddy.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{const bin=atob(j.data),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return u.buffer}).then(buf=>new THREE.GLTFLoader().parse(buf,'',gl=>{setupGLB(gl,'Плюшевый мишка',true);if(glb)glb.isTeddy=true;renderPanel()},()=>teddyFail()))
   .catch(teddyFail)}
-function teddyFail(){cfg.model='parts';say('Плюшевый мишка не загрузился, показываю мишку из деталей')}
+function teddyFail(){cfg.model='parts';save();build();applyTint();focusCam(false);say('Плюшевый мишка не загрузился, показываю мишку из деталей');if(document.body.dataset.screen!=='workshop')renderConcept()}
 const TFS=`uniform vec3 uMain,uAccent,uLimb,uEar,uPatCol,uTip;uniform float uLimbOn,uEarOn,uPat,uLayer,uDen,uCurl,uAO,uTipMix;varying float vLimb,vEar;varying vec3 vObj;
 float th(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float patMask(vec3 o){float a=atan(o.x,o.z);vec2 q=vec2(a*2.6,o.y*8.0);vec2 c=floor(q),f=fract(q)-.5;float h=th(c);
@@ -2189,7 +2189,7 @@ document.getElementById('cx-back').onclick=()=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('cx-admin').hidden){e.preventDefault();closeAdmin()}});
 const previews=window.BearPreview.create({THREE:window.THREE,renderer,scene,defaults:DEF,current:()=>cfg,subject:()=>glb?.wrap||bear,ready:()=>cfg.model==='parts'||!!glb,sync:()=>{if(rebuildQ){rebuildQ=false;build()}if(glb?.rig){teddyQ=false;teddyUpdate();rigAnimate(0,0,null,0,0,0)}}});
 const studio = window.BearLabStudio.install({
-  snapshot:c=>previews.capture(c), needsSnapshot:c=>previews.needs(c), currentSnapshot:c=>previews.isCurrent(c),
+  snapshot:c=>previews.capture(c), needsSnapshot:c=>previews.needs(c), currentSnapshot:c=>previews.isCurrent(c), modelReady:()=>!!renderer&&(cfg.model==='parts'||!!glb),
   mountBear:host=>{if(!renderer)return;const target=host||stage;if(window.__pod)window.__pod.visible=!host;if(renderer.domElement.parentElement!==target){target.prepend(renderer.domElement);viewOff=0;resize();focusCam(false)}},
   resizeBear:()=>{resize();focusCam(false)},
   config:()=>cfg, is3d:()=>bearOn, set3d:v=>{bearOn=!!v&&!!renderer;if(v&&!renderer)cxToast('3D недоступно на этом устройстве');applyFlags();relayout()},

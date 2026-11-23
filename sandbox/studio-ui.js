@@ -14,13 +14,12 @@ window.BearLabStudio={install(api){
   function art(c,thumb=false,card=false,stored){
     const illustrated=!stored&&!api.needsSnapshot({...c,clothes:[],acc:[]})&&(c.clothes||[]).every(id=>api.catalog.some(x=>x.id===id));
     const snapshot=stored||(!illustrated&&api.snapshot(c));
-    if(snapshot)return e('img',{src:snapshot,class:'st-bear-art cx-flat st-render'+(thumb?' st-thumb':''),alt:(c.name||'Мишка')+' — снимок комплектации','data-clothes':(c.clothes||[]).join(' ')});
+    if(snapshot){clearTimeout(snapshotTimer);snapshotTimer=null;snapshotTries=0;return e('img',{src:snapshot,class:'st-bear-art cx-flat st-render'+(thumb?' st-thumb':''),alt:(c.name||'Мишка')+' — снимок комплектации','data-clothes':(c.clothes||[]).join(' ')})}
     if(!illustrated&&api.needsSnapshot(c)&&!snapshot){
-      if(!card&&api.currentSnapshot(c)&&snapshotTries<40){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTries++;api.render()},200)}
-      return e('span',{class:'st-preview-pending'+(thumb?' st-thumb':''),role:'img','aria-label':'Настроенный мишка — параметры в составе'},[icon('bear'),thumb?'Состав ниже':'Настроенный мишка',thumb?null:e('small',{},api.currentSnapshot(c)?'Готовим снимок модели…':'Параметры сохранены в составе заявки')]);
+      if(!card&&api.currentSnapshot(c)&&api.modelReady()&&snapshotTries<40){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTries++;if(document.body.dataset.screen!=='workshop')api.render()},200)}
     }
     const clothes=c.clothes||[],row=clothes.includes('hoodie')?1:clothes.includes('sundress')?2:0,col=clothes.includes('boots')?2:clothes.includes('sneakers')?1:0;
-    const n=e('span',{class:'st-bear-art cx-flat'+(thumb?' st-thumb':'')+(card?' st-card-art':''),role:'img','aria-label':(c.name||'Мишка')+' — '+outfitName(c)+(col===0?', без обуви':col===1?', кеды':', ботинки'),'data-clothes':clothes.join(' '),style:`--bear-x:${col*50}%;--bear-y:${row*50}%;background-position:var(--bear-x) var(--bear-y)`});
+    const n=e('span',{class:'st-bear-art cx-flat st-2d-fallback'+(api.is3d()&&api.modelReady()?' st-hide-if-3d':'')+(thumb?' st-thumb':'')+(card?' st-card-art':''),role:'img','aria-label':(c.name||'Мишка')+' — '+outfitName(c)+(col===0?', без обуви':col===1?', кеды':', ботинки'),'data-clothes':clothes.join(' '),style:`--bear-x:${col*50}%;--bear-y:${row*50}%;background-position:var(--bear-x) var(--bear-y)`});
     const indices={tshirt:2,'hoodie-red':0,'sundress-pink':1,glasses:5,patch:6,crown:7,pirate:8,cap:9,helmet:10,headphones:11,chain:12,bowtie:13,scarf:14,cape:15,watch:16,plaster:17,guitar:18};
     if((c.acc||[]).some(id=>['cap','pirate','helmet'].includes(id)))n.classList.add('st-headroom');
     for(const id of [...clothes.filter(x=>['tshirt','hoodie-red','sundress-pink'].includes(x)),...(c.acc||[])]){const i=indices[id];if(i==null)continue;n.append(e('span',{class:'st-costume-layer st-costume-'+id,'aria-hidden':'true',style:`--sx:${i%5*25}%;--sy:${Math.floor(i/5)*100/3}%`}))}
