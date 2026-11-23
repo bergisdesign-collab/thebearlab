@@ -13,7 +13,7 @@
   const maxLines = 24;
   const maxOrders = 100;
   const maxQuantity = 99;
-  const maxExportLength = 400000;
+  const maxExportLength = 3000000;
   const deliveries = [
     {id: 'pickup', label: 'Пункт выдачи', description: 'Тестовый пункт в мастерской'},
     {id: 'courier', label: 'Курьер', description: 'Тестовая доставка до двери'}
@@ -182,7 +182,12 @@
   function checkPrice(value) {
     requireValue(Number.isSafeInteger(value) && value >= 0 && value <= 1000000, 'Некорректная демонстрационная цена.');
   }
-  function addItem(state, source, unitPrice, clothingCatalog = []) {
+  function checkPreview(preview) {
+    requireValue(typeof preview === 'string' && preview.length <= 100000 &&
+      /^data:image\/(?:webp|png);base64,[A-Za-z0-9+/]+={0,2}$/.test(preview), 'Некорректный снимок мишки.');
+    return preview;
+  }
+  function addItem(state, source, unitPrice, clothingCatalog = [], preview = null) {
     const cfg = normalizeConfig(source);
     if (cfg.model === 'custom') throw new Error('Для заявки выберите встроенную модель: локальный 3D-файл нельзя передать в комплекте.');
     checkPrice(unitPrice);
@@ -191,6 +196,7 @@
     if (same) return setQuantity(state,same.id,same.quantity+1);
     requireValue(state.cart.length < maxLines, 'В корзине уже ' + maxLines + ' разных комплектов.');
     const line = {id:makeId('item'), cfg, quantity:1, unitPrice, clothing};
+    if (preview != null) line.preview = checkPreview(preview);
     return {...state, cart:[...state.cart,line]};
   }
   function setQuantity(state, lineId, quantity) {
@@ -225,7 +231,7 @@
   }
   function checkLines(lines, withDerived) {
     requireValue(Array.isArray(lines) && lines.length <= maxLines, 'Некорректное число комплектов.');
-    const allowed = ['id','cfg','quantity','unitPrice','clothing'];
+    const allowed = ['id','cfg','quantity','unitPrice','clothing','preview'];
     if (withDerived) allowed.push('assembly','accessories');
     const ids = new Set();
     return lines.map(line => {
@@ -241,7 +247,8 @@
       requireValue(Array.isArray(rawClothing) && rawClothing.length === cfg.clothes.length,'Снимок одежды не совпадает с выбранными изделиями.');
       rawClothing.forEach(item => assertKeys(item,['id','label','slot','sku','price','color']));
       const clothing = clothingSnapshot(cfg.clothes,rawClothing,line.unitPrice);
-      return {id:line.id, cfg, quantity:line.quantity, unitPrice:line.unitPrice, clothing};
+      return {id:line.id, cfg, quantity:line.quantity, unitPrice:line.unitPrice, clothing,
+        ...(has(line,'preview') ? {preview:checkPreview(line.preview)} : {})};
     });
   }
   function readOrder(raw, withDerived) {
@@ -307,7 +314,7 @@
   function writeState(state, storage = globalThis.localStorage) {
     // Persist source snapshots compactly. Never refresh their price or config from the active editor.
     const orders = state.orders.map(({id,createdAt,catalogVersion,deliveryId,items}) => ({
-      id,createdAt,catalogVersion,deliveryId,items:items.map(({id,cfg,quantity,unitPrice,clothing}) => ({id,cfg,quantity,unitPrice,clothing}))
+      id,createdAt,catalogVersion,deliveryId,items:items.map(({id,cfg,quantity,unitPrice,clothing,preview}) => ({id,cfg,quantity,unitPrice,clothing,...(preview ? {preview} : {})}))
     }));
     storage.setItem(storageKey,JSON.stringify({version,cart:state.cart,orders}));
   }

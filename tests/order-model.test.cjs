@@ -163,3 +163,26 @@ test('Claude clothing contract snapshots a body and selected garments without ch
   delete old.order.items[0].cfg.clothes;
   assert.deepEqual(orders.importOrder(blank,JSON.stringify(old)).orders[0].items[0].clothing,[]);
 });
+
+test('custom bear preview survives checkout, storage and exchange; legacy orders remain readable', () => {
+  const preview = 'data:image/webp;base64,UklGRg==';
+  const storage = memory();
+  const state = orders.addItem(orders.readState(storage), {main:'#aabbcc',acc:['cap']}, 3500, [], preview);
+  orders.writeState(state, storage);
+  assert.equal(orders.readState(storage).cart[0].preview, preview);
+  const checked = orders.checkout(orders.readState(storage), 'pickup');
+  orders.writeState(checked, storage);
+  const order = orders.readState(storage).orders[0];
+  assert.equal(order.items[0].preview, preview);
+  const imported = orders.importOrder(orders.readState(memory()), orders.exportOrder(order));
+  assert.equal(imported.orders[0].items[0].preview, preview);
+  assert.equal(imported.orders[0].items[0].cfg.main, '#aabbcc');
+  assert.ok(Object.isFrozen(imported.orders[0].items[0]));
+  const legacy = orders.checkout(draft(), 'pickup').orders[0];
+  assert.equal(Object.hasOwn(orders.importOrder(orders.readState(memory()), orders.exportOrder(legacy)).orders[0].items[0], 'preview'), false);
+  for (const bad of ['https://example.com/a.png','data:image/svg+xml;base64,PHN2Zz4=', 'data:image/png;base64,' + 'A'.repeat(100001), 123]) {
+    const doc = JSON.parse(orders.exportOrder(order));
+    doc.order.items[0].preview = bad;
+    assert.throws(() => orders.importOrder(orders.readState(memory()), JSON.stringify(doc)), /снимок/);
+  }
+});

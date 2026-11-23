@@ -347,6 +347,9 @@ body[data-screen="assembly"] #concept{background:radial-gradient(120% 90% at 50%
   .cx-primary:active,.cx-secondary:active,.cx-card:active,#cx-back:active{transform:none}
 }
 </style>
+<link rel="stylesheet" href="sandbox/studio-ui.css">
+<script src="sandbox/studio-ui.js"></script>
+<script src="sandbox/bear-preview.js"></script>
 </head>
 <body data-screen="home" data-bear="off">
 
@@ -445,8 +448,8 @@ const ACC=[
   {id:'cape',label:'Плащ героя',p:490,slot:'back'},{id:'watch',label:'Часы',p:290,slot:'wrist'},{id:'plaster',label:'Пластырь',p:90,slot:'face'},{id:'guitar',label:'Гитара',p:590,slot:'hands'}
 ];
 const CLOTHES=[
-  {id:'hoodie',label:'Худи',slot:'top',sku:'CL-TOP-001',price:690,color:'#e8554e'},
-  {id:'sundress',label:'Сарафан',slot:'top',sku:'CL-TOP-002',price:790,color:'#f06595'},
+  {id:'hoodie',label:'Худи',slot:'top',sku:'CL-TOP-001',price:690,color:'#69849c'},
+  {id:'sundress',label:'Сарафан',slot:'top',sku:'CL-TOP-002',price:790,color:'#b197d0'},
   {id:'tshirt',label:'Футболка',slot:'top',sku:'CL-TOP-003',price:490,color:'#4dabf7'},
   {id:'sneakers',label:'Кеды',slot:'feet',sku:'CL-FEET-001',price:390,color:'#f2f2f2'},
   {id:'boots',label:'Ботинки',slot:'feet',sku:'CL-FEET-002',price:490,color:'#5b3b1f'}
@@ -872,6 +875,11 @@ function buildAcc(c,head,H,hr,B,g,opt={}){
 let camGoal=null;
 const portraitK=()=>{const a=camera.aspect||1;return a<.95?Math.min(1.7,Math.pow(.95/a,.6)):1};
 function focusCam(animate=true){
+  animate=animate&&document.body.dataset.motion!=='off';
+  if(renderer?.domElement.parentElement?.classList.contains('cx-hero')){
+    const object=glb?.wrap||bear;
+    if(object){object.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(object),size=box.getSize(new V3()),center=box.getCenter(new V3());const distance=Math.max(size.y,size.x/camera.aspect)/(2*Math.tan(camera.fov*Math.PI/360))*1.18;controls.target.copy(center);camera.position.copy(center).add(new V3(0,0,distance));camera.clearViewOffset();camGoal=null;controls.update();return}
+  }
   if (!renderer) return;
 
   const t=TABS.find(x=>x.id===tab),f=t?t.focus:'all';
@@ -907,7 +915,8 @@ let FR=0,lastErr='';const DBG=location.hash==='#debug';let dbgEl=null;if(DBG){db
 function loop(){if (!renderer) return;requestAnimationFrame(loop);if (document.hidden || document.querySelector('dialog[open]')) return;if (document.body.dataset.screen !== 'workshop' && document.body.dataset.bear !== 'on') return;FR++;try{loop0()}catch(err){if(String(err)!==lastErr){lastErr=String(err)+' @'+((err.stack||'').split('\n')[1]||'');console.error(err);say('Ошибка: '+err.message)}}
   if(DBG&&FR%10===0)dbgEl.textContent=`fr ${FR}\nact ${act?act.name+' '+act.t.toFixed(2):'-'}\nglb ${!!glb} rig ${!!(glb&&glb.rig)}\nwave ${wave.toFixed(2)}\nerr ${lastErr}`}
 function loop0(){
-  const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
+  const moving=document.body.dataset.motion!=='off',elapsed=Math.min(clock.getDelta(),.05),dt=moving?elapsed:0,t=moving?clock.elapsedTime:0;
+  if(!moving){act=null;wave=0;bounce=0;}
   for(const k in SETS)SETS[k].sh.uTime.value=t;
   let oy=0,ry=0,rx=0,e=0,p=0,T=0,an=null;
   if(act){act.t+=dt;p=act.t/act.dur;T=act.t;e=Math.max(0,Math.min(1,p/.15,(1-p)/.15));an=act.name;if(p>=1){if(DBG){act.t=0;if(an==='wave')wave=1}else{act=null;an=null;renderMovesState()}}}
@@ -943,7 +952,7 @@ function loop0(){
   const sheetOff=isPhone()&&app.classList.contains('sheet-open')?document.getElementById('sheet').getBoundingClientRect().height*.38:0;
   const dockEl=document.getElementById('cx-dock');
   const liveBear=document.body.dataset.bear==='on' && ['home','wardrobe','look','share'].includes(document.body.dataset.screen);
-  const dockOff=liveBear&&dockEl?dockEl.getBoundingClientRect().height*.42:0;
+  const dockOff=liveBear&&dockEl&&renderer.domElement.parentElement===stage?dockEl.getBoundingClientRect().height*.42:0;
   const wantOff=Math.max(sheetOff,dockOff);
   if(Math.abs(wantOff-viewOff)>.5){viewOff+=(wantOff-viewOff)*.18;const w=stage.clientWidth,h=stage.clientHeight;if(w&&h){if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else{viewOff=0;camera.clearViewOffset()}}}
   controls.update();renderer.render(scene,camera);
@@ -954,7 +963,7 @@ let lastAsp=0,refT=0;function resize(){
   document.documentElement.style.setProperty('--railH', railHeight + 'px');
   document.getElementById('sheet').inert = isPhone() && !document.getElementById('app').classList.contains('sheet-open');
   if (!renderer) return;
-  const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;const asp=w/h;if(lastAsp&&Math.abs(asp-lastAsp)>.12){clearTimeout(refT);refT=setTimeout(()=>focusCam(),250)}lastAsp=asp;renderer.setSize(w,h,false);camera.aspect=w/h;if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else camera.clearViewOffset();camera.updateProjectionMatrix()}
+  const host=renderer.domElement.parentElement||stage;const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;const asp=w/h;if(lastAsp&&Math.abs(asp-lastAsp)>.12){clearTimeout(refT);refT=setTimeout(()=>focusCam(),250)}lastAsp=asp;renderer.setSize(w,h,false);camera.aspect=w/h;if(viewOff>.5)camera.setViewOffset(w,h,0,viewOff,w,h);else camera.clearViewOffset();camera.updateProjectionMatrix()}
 if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
 
 /* ============ UPDATE PIPE ============ */
@@ -1344,7 +1353,7 @@ function colorCss(item){
 }
 function clothItems(source,snapshot){
   return ((source&&source.clothes)||[]).map(id=>{
-    return CLOTHES.find(a=>a.id===id)||(snapshot||[]).find(a=>a.id===id)||null;
+    return (snapshot||[]).find(a=>a.id===id)||CLOTHES.find(a=>a.id===id)||null;
   }).filter(Boolean);
 }
 function lineCaption(line){
@@ -1472,7 +1481,8 @@ async function changeQty(id,qty){
 }
 async function addCurrent(){
   try{
-    await commitOrders(s=>BearOrders.addItem(s,clone(cfg),total(cfg),CLOTHES));
+    const source=clone(cfg),price=total(cfg),preview=previews.capture(cfg);
+    await commitOrders(s=>BearOrders.addItem(s,source,price,CLOTHES,preview));
     cxToast('В корзине');
     pushFlow('cart');
   }catch(e){cxToast(e.message)}
@@ -1637,7 +1647,7 @@ function cartView(){
   else if(!state.cart.length) rows.push(el('p',{class:'cx-note'},'Корзина пуста. Собери мишку в гардеробе.'));
   else state.cart.forEach(line=>{
     rows.push(el('div',{class:'cx-row'},[
-      flatBear(line.cfg,line.clothing,true),
+      flatBear(line.cfg,line.clothing,true,line.preview),
       el('div',{class:'cx-grow'},[
         el('div',{class:'cx-name'},(line.cfg.name||'').trim()||'Мой мишка'),
         el('div',{class:'cx-sub'},lineCaption(line)),
@@ -1680,7 +1690,7 @@ function deliveryView(){
   else fields.push(el('p',{class:'cx-sub',style:'margin:0'},'Пункт: Тестовый пункт в мастерской'));
   const sum=state.cart.reduce((n,l)=>n+l.quantity*l.unitPrice,0);
   const preview=state.cart[0]?el('div',{class:'cx-row'},[
-    flatBear(state.cart[0].cfg,state.cart[0].clothing,true),
+    flatBear(state.cart[0].cfg,state.cart[0].clothing,true,state.cart[0].preview),
     el('div',{class:'cx-grow'},[el('div',{class:'cx-name'},'Демозаказ'),el('div',{class:'cx-sub'},state.cart.length+' компл. · '+rub(sum))])
   ]):el('p',{class:'cx-note'},'Корзина пуста.');
   const btn=el('button',{class:'cx-primary',type:'submit'},d.busy?'Собираем…':'Создать заявку');
@@ -1706,7 +1716,7 @@ function confirmView(){
     el('div',{class:'cx-hero-emoji','aria-hidden':'true'},'🎁'),
     el('div',{class:'cx-bignum'},order.id),
     el('div',{class:'cx-row'},[
-      flatBear(order.items[0].cfg,order.items[0].clothing,true),
+      flatBear(order.items[0].cfg,order.items[0].clothing,true,order.items[0].preview),
       el('div',{class:'cx-grow'},[el('div',{class:'cx-name'},method?method.label:'Доставка'),el('div',{class:'cx-sub'},unitLabel('body',n)+' · '+rub(order.total))])
     ]),
     el('p',{class:'cx-note'},'Сохранено на этом устройстве')
@@ -1728,7 +1738,7 @@ function ordersView(){
     const n=order.items.reduce((s,i)=>s+i.quantity,0);
     const method=BearOrders.deliveries.find(x=>x.id===order.deliveryId);
     rows.push(el('button',{class:'cx-row',type:'button',onclick:()=>pushFlow('assembly',{orderId:order.id})},[
-      ...order.items.slice(0,3).map(item=>flatBear(item.cfg,item.clothing,true)),
+      ...order.items.slice(0,3).map(item=>flatBear(item.cfg,item.clothing,true,item.preview)),
       el('div',{class:'cx-grow'},[
         el('div',{class:'cx-name'},order.id),
         el('div',{class:'cx-sub'},(method?method.label:'')+' · '+unitLabel('body',n))
@@ -1776,7 +1786,7 @@ function assemblyView(){
     const clothes=item.clothing||[];
     blocks.push(el('div',{class:'cx-card-block'},[
       el('div',{class:'cx-row',style:'background:transparent;padding:0'},[
-        flatBear(item.cfg,clothes,true),
+        flatBear(item.cfg,clothes,true,item.preview),
         el('div',{class:'cx-grow'},[el('div',{class:'cx-name'},'Мишка '+(ix+1)),el('div',{class:'cx-sub'},lineCaption(item))])
       ]),
       componentRow('🧸','#efe4d4','Основа мишки','',unitLabel('body',item.quantity)),
@@ -1888,6 +1898,23 @@ document.getElementById('cx-back').onclick=()=>{
   relayout();
 };
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('cx-admin').hidden){e.preventDefault();closeAdmin()}});
+const previews=window.BearPreview.create({THREE:window.THREE,renderer,scene,defaults:DEF,current:()=>cfg,subject:()=>glb?.wrap||bear,ready:()=>cfg.model==='parts'||!!glb,sync:()=>{if(rebuildQ){rebuildQ=false;build()}if(glb?.rig){teddyQ=false;teddyUpdate()}}});
+const studio = window.BearLabStudio.install({
+  snapshot:c=>previews.capture(c), needsSnapshot:c=>previews.needs(c), currentSnapshot:c=>previews.isCurrent(c),
+  mountBear:host=>{if(!renderer)return;const target=host||stage;if(window.__pod)window.__pod.visible=!host;if(renderer.domElement.parentElement!==target){target.prepend(renderer.domElement);viewOff=0;resize();focusCam(false)}},
+  resizeBear:()=>{resize();focusCam(false)},
+  config:()=>cfg, is3d:()=>bearOn, set3d:v=>{bearOn=!!v&&!!renderer;applyFlags();relayout()},
+  setName:v=>set('name',v), setSize:v=>set('size',v), setClothes:v=>set('clothes',v),
+  outfits:OUTFITS, catalog:CLOTHES, clothesPrice:clothesTotal, price:()=>total(cfg),
+  render:()=>renderConcept(), hub:id=>showHub(id), flow:(id,data)=>pushFlow(id,data),
+  workshop:()=>showWorkshop(), closeAdmin:()=>closeAdmin(), toast:cxToast,
+  bottom:id=>bottomNav(id), treat:()=>treatBear(), orders:()=>readOrders()
+});
+flatBear=studio.bear; CX_VIEWS.home=studio.home; CX_VIEWS.wardrobe=studio.wardrobe;
+openAdmin=studio.admin;
+const originalShowWorkshop=showWorkshop;showWorkshop=function(){originalShowWorkshop();studio.sync()};
+const originalRenderConcept=renderConcept;
+renderConcept=function(){originalRenderConcept();studio.sync()};
 applyFlags();
 renderConcept();
 
