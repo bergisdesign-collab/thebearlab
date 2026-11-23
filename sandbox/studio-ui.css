@@ -60,3 +60,25 @@ body[data-theme=game] .cx-grid{background:#c9b4e8;border-color:#bda3dd;box-shado
 @media(min-width:761px) and (max-width:930px){body[data-screen=workshop] #cx-back{left:322px;top:76px}}
 
 body:not([data-screen=workshop]){color-scheme:light}
+/* Wardrobe layers share the illustrated bear's square coordinate space. */
+.st-bear-art{position:relative}
+.st-costume-layer{position:absolute;display:block;background:url('../assets/demo/wardrobe-items.png') var(--sx) var(--sy)/500% 400% no-repeat;pointer-events:none;aspect-ratio:1;clip-path:inset(8%);filter:drop-shadow(0 2px 2px #16103b22);width:50%;left:25%;top:20%;z-index:4}
+.st-costume-glasses{width:44%;left:30%;top:-2%;transform:rotate(-8deg);z-index:6;clip-path:inset(14% 0% 12% 0%);background-size:480% 400%}
+.st-costume-patch{width:43%;left:30%;top:-2%;transform:rotate(-8deg);z-index:6}
+.st-costume-cap{width:46%;left:29%;top:-18%;transform:rotate(-7deg);z-index:7;clip-path:inset(6% 1%)}
+.st-costume-pirate{width:57%;left:23%;top:-20%;transform:rotate(-7deg);z-index:7}
+.st-costume-helmet{width:51%;left:27%;top:-22%;transform:rotate(-7deg);z-index:7}
+.st-costume-crown{width:33%;left:35%;top:-10%;transform:rotate(-6deg);z-index:7}
+/* The catalog headphones are drawn in three-quarter view: wear them at the neck. */
+.st-costume-headphones{width:34%;left:35%;top:35%;z-index:5}
+.st-costume-chain{width:30%;left:36%;top:38%;z-index:4}
+.st-costume-bowtie{width:24%;left:40%;top:29%;z-index:4}
+.st-costume-scarf{width:38%;left:32%;top:31%;z-index:4}
+.st-costume-cape{width:56%;left:24%;top:30%;z-index:3}
+.st-costume-watch{width:14%;left:69%;top:53%;transform:rotate(-10deg);z-index:5}
+.st-costume-plaster{width:13%;left:57%;top:25%;transform:rotate(-15deg);z-index:6}
+.st-costume-guitar{width:43%;left:43%;top:40%;transform:rotate(8deg);z-index:6}
+.st-costume-tshirt{width:52%;left:26%;top:28.5%;z-index:2}
+.st-headroom{transform:translateY(4%) scale(.9);transform-origin:50% 50%}
+.st-costume-hoodie-red{width:56%;left:24%;top:31%;transform:scaleY(.8);transform-origin:50% 0;z-index:2;filter:sepia(1) saturate(3) hue-rotate(315deg) brightness(.9)}
+.st-costume-sundress-pink{width:55%;left:25%;top:37.5%;transform:scaleY(.85);transform-origin:50% 0;z-index:2;filter:hue-rotate(27deg) saturate(1.35)}

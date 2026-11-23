@@ -9,22 +9,27 @@ window.BearLabStudio={install(api){
   const save=()=>{try{localStorage.setItem('bearlab.studio.prefs',JSON.stringify(prefs))}catch(_){}document.body.dataset.theme=prefs.theme==='game'?'game':'studio';document.body.dataset.motion=prefs.motion&&!reducedMotion.matches?'on':'off';document.body.dataset.targets=prefs.largeTargets?'large':'normal';document.body.dataset.hand=prefs.hand==='left'?'left':'right'};
   const theme=v=>{prefs.theme=v;save();api.set3d(prefs.bear3d);shell();api.render();};
   const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' ₽';
-  const outfitName=c=>(c.clothes||[]).includes('hoodie')?'Худи':(c.clothes||[]).includes('sundress')?'Сарафан':(c.clothes||[]).includes('tshirt')?'Футболка':'Базовый образ';
+  const outfitName=c=>api.catalog.find(x=>(c.clothes||[]).includes(x.id)&&x.slot==='top')?.label||'Базовый образ';
   let snapshotTimer, snapshotTries=0;
   function art(c,thumb=false,card=false,stored){
-    const snapshot=stored||(!card&&api.snapshot(c));
+    const illustrated=!stored&&!api.needsSnapshot({...c,clothes:[],acc:[]})&&(c.clothes||[]).every(id=>api.catalog.some(x=>x.id===id));
+    const snapshot=stored||(!illustrated&&api.snapshot(c));
     if(snapshot)return e('img',{src:snapshot,class:'st-bear-art cx-flat st-render'+(thumb?' st-thumb':''),alt:(c.name||'Мишка')+' — снимок комплектации','data-clothes':(c.clothes||[]).join(' ')});
-    if(!card&&api.needsSnapshot(c)&&!snapshot){
-      if(api.currentSnapshot(c)&&snapshotTries<40){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTries++;api.render()},200)}
+    if(!illustrated&&api.needsSnapshot(c)&&!snapshot){
+      if(!card&&api.currentSnapshot(c)&&snapshotTries<40){clearTimeout(snapshotTimer);snapshotTimer=setTimeout(()=>{snapshotTries++;api.render()},200)}
       return e('span',{class:'st-preview-pending'+(thumb?' st-thumb':''),role:'img','aria-label':'Настроенный мишка — параметры в составе'},[icon('bear'),thumb?'Состав ниже':'Настроенный мишка',thumb?null:e('small',{},api.currentSnapshot(c)?'Готовим снимок модели…':'Параметры сохранены в составе заявки')]);
     }
     const clothes=c.clothes||[],row=clothes.includes('hoodie')?1:clothes.includes('sundress')?2:0,col=clothes.includes('boots')?2:clothes.includes('sneakers')?1:0;
-    const n=e('span',{class:'st-bear-art cx-flat'+(thumb?' st-thumb':'')+(card?' st-card-art':''),role:'img','aria-label':(c.name||'Мишка')+' — '+outfitName(c)+(col===0?', без обуви':col===1?', кеды':', ботинки'),'data-clothes':clothes.join(' '),style:`background-position:${col*50}% ${row*50}%`});
+    const n=e('span',{class:'st-bear-art cx-flat'+(thumb?' st-thumb':'')+(card?' st-card-art':''),role:'img','aria-label':(c.name||'Мишка')+' — '+outfitName(c)+(col===0?', без обуви':col===1?', кеды':', ботинки'),'data-clothes':clothes.join(' '),style:`--bear-x:${col*50}%;--bear-y:${row*50}%;background-position:var(--bear-x) var(--bear-y)`});
+    const indices={tshirt:2,'hoodie-red':0,'sundress-pink':1,glasses:5,patch:6,crown:7,pirate:8,cap:9,helmet:10,headphones:11,chain:12,bowtie:13,scarf:14,cape:15,watch:16,plaster:17,guitar:18};
+    if((c.acc||[]).some(id=>['cap','pirate','helmet'].includes(id)))n.classList.add('st-headroom');
+    for(const id of [...clothes.filter(x=>['tshirt','hoodie-red','sundress-pink'].includes(x)),...(c.acc||[])]){const i=indices[id];if(i==null)continue;n.append(e('span',{class:'st-costume-layer st-costume-'+id,'aria-hidden':'true',style:`--sx:${i%5*25}%;--sy:${Math.floor(i/5)*100/3}%`}))}
+    if(c.acc?.length)n.setAttribute('aria-label',n.getAttribute('aria-label')+', '+api.accessories.filter(x=>c.acc.includes(x.id)).map(x=>x.label).join(', '));
     return n;
   }
   function segment(options,current,onPick){return e('div',{class:'st-segment'},options.map(([id,label])=>e('button',{type:'button','aria-pressed':String(current===id),onclick:()=>onPick(id)},label)))}
   const navItems=[['home','Дом'],['workshop','Мастерская'],['wardrobe','Гардероб'],['world','Мир'],['games','Мини-игра']];
-  function go(id){api.closeAdmin();if(id==='workshop')api.workshop();else if(['home','wardrobe','world','games'].includes(id))api.hub(id);else api.flow(id);sync()}
+  function go(id){api.closeAdmin();if(id==='workshop')api.workshop();else if(['home','wardrobe','world','games','arcade'].includes(id))api.hub(id);else api.flow(id);sync()}
   let shellNode;
   function shell(){
     if(!shellNode){shellNode=e('div',{id:'studio-shell'});document.body.append(shellNode)}
@@ -95,7 +100,7 @@ window.BearLabStudio={install(api){
     const select=(label,options,current,onChange)=>{const s=e('select',{'aria-label':label},options.map(([id,text])=>e('option',{value:id},text)));s.value=current;s.onchange=()=>onChange(s.value);return s};
     const name=e('input',{type:'text','aria-label':'Имя мишки',maxlength:10,value:api.config().name||'',placeholder:'Например, Тоша'});name.addEventListener('change',()=>{api.setName(name.value.trim());api.render()});
     const size=select('Размер мишки',[['20','20 см'],['30','30 см'],['45','45 см']],api.config().size,v=>{api.setSize(v);api.render()});
-    const scenes=[['home','Дом'],['workshop','Мастерская'],['wardrobe','Гардероб'],['look','Мой мишка'],['cart','Корзина'],['delivery','Доставка'],['confirm','Подтверждение'],['orders','Заявки'],['assembly','Лист сборки'],['share','Поделиться'],['world','Мир'],['games','Игра'],['result','Результат']];
+    const scenes=[['home','Дом'],['workshop','Мастерская'],['wardrobe','Гардероб'],['look','Мой мишка'],['cart','Корзина'],['delivery','Доставка'],['confirm','Подтверждение'],['orders','Заявки'],['assembly','Лист сборки'],['share','Поделиться'],['world','Мир'],['arcade','Три мини-игры'],['games','Три в ряд'],['result','Результат']];
     const jump=id=>{const s=api.orders();if(id==='delivery'&&!s.cart.length){api.toast('Сначала добавьте мишку в корзину');return}if(['confirm','assembly'].includes(id)){if(!s.orders.length){api.toast('Сначала соберите демозаявку');return}close();api.flow(id,{orderId:s.orders[0].id});return}close();go(id)};
     const content=e('div',{class:'cx-sheet',role:'dialog','aria-modal':'true','aria-label':'Настройки прототипа'},[
       e('div',{class:'st-dialog-head'},[e('div',{},[e('h3',{},'Настройки прототипа'),e('p',{},'Одни данные. Два способа посмотреть на игру.')]),e('button',{type:'button',class:'st-dialog-close','aria-label':'Закрыть настройки',onclick:close},'×')]),
@@ -105,6 +110,7 @@ window.BearLabStudio={install(api){
       setting('Крупнее кнопки','Больше места для нажатия и меньше вещей в одном ряду.',segment([['normal','Обычно'],['large','Крупнее']],prefs.largeTargets?'large':'normal',v=>{prefs.largeTargets=v==='large';save();admin()})),
       setting('Ведущая рука','В горизонтальной игре действия располагаются ближе к выбранной руке.',segment([['left','Левая'],['right','Правая']],prefs.hand,v=>{prefs.hand=v;save();admin()})),
       setting('Имя мишки','Отображается в вашем заказе.',name),setting('Размер','Демонстрационная комплектация.',size),
+      game.demoControls(),
       e('p',{class:'st-dialog-section'},'Карта экранов'),e('div',{class:'st-screen-map'},scenes.map(([id,label])=>button(label,()=>jump(id),'',null))),
       e('p',{class:'st-disclosure'},'Демозаявки сохраняются только в этом браузере. Для обмена — JSON. Иллюстрации созданы ИИ: проба, не утверждено. Изготовимость и цены требуют согласования с производством.')
     ]);
@@ -115,5 +121,5 @@ window.BearLabStudio={install(api){
   const game=window.BearLabGame.install({...api,e,art,go,icon,preferences:()=>({...prefs,motion:prefs.motion&&!reducedMotion.matches,motionLocked:reducedMotion.matches}),comfort:update=>{Object.assign(prefs,update);save()}});
   reducedMotion.addEventListener('change',save);
   save();api.set3d(prefs.bear3d);shell();
-  return {gem:i=>prefs.theme==='game'?game.gem(i):null,reward:game.reward,bottom:id=>prefs.theme==='game'?game.nav(id==='wardrobe'?'collection':id):null,bear:(c,s,t,p)=>{if(!p&&(s||[]).some(it=>{const current=api.catalog.find(x=>x.id===it.id);return !current||current.color!==it.color}))return e('span',{class:'st-preview-pending st-thumb',role:'img','aria-label':'Историческая комплектация — исходные параметры сохранены'},[icon('bear'),'Состав сохранён']);return art(c||api.config(),!!t,false,p)},home,wardrobe,world,admin,sync,icon};
+  return {confirmRestart:game.confirmRestart,arcade:game.arcade,recordMatch3:game.recordMatch3,canStart:game.canStart,gem:i=>prefs.theme==='game'?game.gem(i):null,reward:game.reward,bottom:id=>prefs.theme==='game'?game.nav(id==='wardrobe'?'collection':id):null,bear:(c,s,t,p)=>{if(!p&&(s||[]).some(it=>{const current=api.catalog.find(x=>x.id===it.id);return !current||current.color!==it.color}))return e('span',{class:'st-preview-pending st-thumb',role:'img','aria-label':'Историческая комплектация — исходные параметры сохранены'},[icon('bear'),'Состав сохранён']);return art(c||api.config(),!!t,false,p)},home,wardrobe,world,admin,sync,icon};
 }};

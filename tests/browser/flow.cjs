@@ -11,18 +11,18 @@ for(const [name,width,height] of [['mobile',390,844],['desktop',1440,1000]]){
  try{
  await p.addInitScript(()=>{if(!localStorage.getItem('bearlab.studio.prefs'))localStorage.setItem('bearlab.studio.prefs',JSON.stringify({theme:'studio',motion:true,bear3d:false}))});await p.goto((process.env.BEARLAB_BASE_URL||'http://127.0.0.1:8178/'),{waitUntil:'domcontentloaded'});await p.locator('[data-concept=home]').waitFor();
  await btn('Угостить').click();await snap('home');
- await nav('wardrobe','Гардероб');await p.getByRole('button',{name:'Сарафан +1 280 ₽',exact:true}).count();await p.locator('.st-outfit').filter({hasText:'Сарафан'}).click();
+ await nav('wardrobe','Гардероб');await p.getByRole('button',{name:'Сарафан +1 280 ₽',exact:true}).count();await p.locator('.st-outfit').filter({has:p.getByText('Сарафан',{exact:true})}).click();
  assert.equal(await p.locator('.st-hero .st-bear-art').getAttribute('data-clothes'),'sundress boots');await snap('wardrobe');
  await btn('Посмотреть образ').click();await btn('В корзину').click();await p.locator('[data-concept=cart]').waitFor();
- await btn('Назад').click();await btn('Назад').click();await p.locator('.st-outfit').filter({hasText:'Худи'}).click();await btn('Посмотреть образ').click();await btn('В корзину').click();
+ await btn('Назад').click();await btn('Назад').click();await p.locator('.st-outfit').filter({has:p.getByText('Худи',{exact:true})}).click();await btn('Посмотреть образ').click();await btn('В корзину').click();
  await p.waitForFunction(()=>JSON.parse(localStorage.getItem('bearlab.orders.v1')).cart.length===2);
  let state=await p.evaluate(()=>JSON.parse(localStorage.getItem('bearlab.orders.v1')));assert.equal(state.cart.length,2);assert.deepEqual(state.cart[0].cfg.clothes.slice().sort(),['boots','sundress']);assert.deepEqual(state.cart[1].cfg.clothes,['hoodie','sneakers']);
  await btn('Больше').first().click();await p.waitForTimeout(80);await snap('cart');
- await btn('К доставке').click();await btn('Создать заявку').click();await p.getByRole('alert').waitFor();
+ await btn('К доставке').click();await btn('Проверить заявку').click();await p.getByRole('alert').waitFor();
  await p.getByRole('textbox',{name:'Имя',exact:true}).fill('Демо');await p.getByRole('textbox',{name:'Телефон',exact:true}).fill('0000000000');
  await p.locator('.cx-opt').filter({hasText:'Курьер'}).click();await p.getByRole('textbox',{name:'Адрес',exact:true}).fill('Тестовая улица, 1');
  await p.locator('.cx-opt').filter({hasText:'Пункт выдачи'}).click();assert.equal(await p.getByRole('textbox',{name:'Адрес',exact:true}).count(),0);await snap('delivery');
- await btn('Создать заявку').click();await btn('Открыть заявку').click();await snap('assembly');
+ await btn('Проверить заявку').click();await p.locator('[data-concept=review]').waitFor();assert.equal((await p.evaluate(()=>JSON.parse(localStorage.getItem('bearlab.orders.v1')))).orders.length,0);await snap('review');await btn('Подтвердить демозаявку').click();await p.locator('[data-concept=confirm]').waitFor();await btn('Открыть заявку').click();await snap('assembly');
  state=await p.evaluate(()=>JSON.parse(localStorage.getItem('bearlab.orders.v1')));assert.equal(state.orders.length,1);assert.equal(state.orders[0].items.length,2);assert.equal(state.orders[0].items[0].quantity,2);
  const dPromise=p.waitForEvent('download');await btn('Скачать JSON').click();const d=await dPromise;const dest=OUT+'/'+name+'-order.json';await d.saveAs(dest);const data=JSON.parse(fs.readFileSync(dest,'utf8'));assert.equal(data.order.items.length,2);
  await p.reload({waitUntil:'domcontentloaded'});state=await p.evaluate(()=>JSON.parse(localStorage.getItem('bearlab.orders.v1')));assert.equal(state.orders.length,1);

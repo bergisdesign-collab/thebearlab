@@ -3,7 +3,7 @@
 window.BearPreview={create(api){
   const cache=new Map();
   const key=c=>JSON.stringify(Object.keys(c).filter(k=>k!=='outfit').sort().map(k=>[k,Array.isArray(c[k])?c[k].slice().sort():c[k]]));
-  const needs=c=>(c.clothes||[]).includes('tshirt')||Object.keys(api.defaults).some(k=>!['clothes','name','size'].includes(k)&&JSON.stringify(c[k])!==JSON.stringify(api.defaults[k]));
+  const needs=c=>(c.clothes||[]).some(id=>['tshirt','hoodie-red','sundress-pink'].includes(id))||Object.keys(api.defaults).some(k=>!['clothes','name','size'].includes(k)&&JSON.stringify(c[k])!==JSON.stringify(api.defaults[k]));
   function capture(c){
     if(!needs(c))return null;
     const id=key(c);if(cache.has(id))return cache.get(id);

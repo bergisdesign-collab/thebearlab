@@ -380,6 +380,14 @@ body[data-screen="result"] #concept{background:radial-gradient(120% 90% at 50% 1
 </style>
 <link rel="stylesheet" href="sandbox/studio-ui.css">
 <link rel="stylesheet" href="sandbox/game-ui.css">
+<link rel="stylesheet" href="sandbox/wardrobe-ui.css">
+<link rel="stylesheet" href="sandbox/arcade.css">
+<link rel="stylesheet" href="sandbox/life-ui.css">
+<script src="sandbox/life-model.js"></script>
+<script src="sandbox/life-ui.js"></script>
+<script src="sandbox/wardrobe-ui.js"></script>
+<script src="sandbox/arcade-model.js"></script>
+<script src="sandbox/arcade.js"></script>
 <script src="sandbox/game-ui.js"></script>
 <script src="sandbox/studio-ui.js"></script>
 <script src="sandbox/bear-preview.js"></script>
@@ -483,11 +491,13 @@ const ACC=[
 const CLOTHES=[
   {id:'hoodie',label:'Худи',slot:'top',sku:'CL-TOP-001',price:690,color:'#69849c'},
   {id:'sundress',label:'Сарафан',slot:'top',sku:'CL-TOP-002',price:790,color:'#b197d0'},
+  {id:'hoodie-red',label:'Красное худи',slot:'top',sku:'CL-TOP-004',price:690,color:'#e8554e'},
+  {id:'sundress-pink',label:'Розовый сарафан',slot:'top',sku:'CL-TOP-005',price:790,color:'#f06595'},
   {id:'tshirt',label:'Футболка',slot:'top',sku:'CL-TOP-003',price:490,color:'#4dabf7'},
   {id:'sneakers',label:'Кеды',slot:'feet',sku:'CL-FEET-001',price:390,color:'#f2f2f2'},
   {id:'boots',label:'Ботинки',slot:'feet',sku:'CL-FEET-002',price:490,color:'#5b3b1f'}
 ];
-const OUTFITS=[{name:'База',clothes:[]},{name:'Худи',clothes:['hoodie','sneakers']},{name:'Сарафан',clothes:['sundress','boots']}];
+const OUTFITS=[{name:'База',clothes:[]},{name:'Худи',clothes:['hoodie','sneakers']},{name:'Сарафан',clothes:['sundress','boots']},{name:'Красное худи',clothes:['hoodie-red','sneakers']},{name:'Розовый сарафан',clothes:['sundress-pink','boots']}];
 const clothesTotal=l=>(l||[]).reduce((s,id)=>{const a=CLOTHES.find(x=>x.id===id);return s+(a?a.price:0)},0);
 const sameClothes=(a,b)=>{a=a||[];b=b||[];return a.length===b.length&&a.every(x=>b.includes(x))};
 const FUR={smooth:{len:0,N:0,grav:0,curl:0},short:{len:.028,N:8,grav:0,curl:0},fluffy:{len:.06,N:14,grav:.25,curl:0},xfluffy:{len:.11,N:18,grav:.6,curl:0},curly:{len:.07,N:14,grav:.1,curl:1}};
@@ -838,8 +848,9 @@ function buildEar(eg,c,e,s,set){
   }
 }
 function buildClothes(c,B,g,opt={}){
-  const has=id=>(c.clothes||[]).includes(id);
-  const garmentColor=id=>CLOTHES.find(it=>it.id===id).color;
+  const worn=id=>(c.clothes||[]).find(selected=>selected===id||(id==='hoodie'&&selected==='hoodie-red')||(id==='sundress'&&selected==='sundress-pink'));
+  const has=id=>!!worn(id);
+  const garmentColor=id=>CLOTHES.find(it=>it.id===worn(id)).color;
   const furL=opt.furL!=null?opt.furL:0, out=1+furL*0.5;
   if(has('hoodie')){const m=std(garmentColor('hoodie'),{roughness:.95});
     const torso=mesh(ellip(B.x*1.07*out,B.y*0.58,B.z*1.07*out,40,28),m);torso.position.y=B.y*0.10;g.add(torso);
@@ -1363,7 +1374,7 @@ document.getElementById('loading').remove();
 /* ============ CONCEPT: мишка и маршрут заказа ============ */
 let beautyOn=false,bearOn=false,toastT=0,checkoutStarted=false;
 let cxStack=[{id:'home',data:{}}];
-const CX_HUBS={home:1,wardrobe:1,world:1,games:1};
+const CX_HUBS={home:1,wardrobe:1,world:1,games:1,arcade:1};
 const OUTFIT_EMOJI={База:'🧸',Худи:'🧥',Сарафан:'👗'};
 const SVGNS='http://www.w3.org/2000/svg';
 function cxCur(){return cxStack[cxStack.length-1]}
@@ -1423,17 +1434,17 @@ function flatBear(source,snapshot,thumb){
   add('ellipse',{cx:42,cy:168,rx:16,ry:28,fill:limb});
   add('ellipse',{cx:158,cy:168,rx:16,ry:28,fill:limb});
   add('ellipse',{cx:100,cy:174,rx:54,ry:50,fill:fur});
-  if(top&&top.id==='hoodie') add('path',{d:'M46 108C46 36 154 36 154 108l-12-6c0-36-84-36-84 0z',fill:colorCss(top),'data-part':'hoodie'});
+  if(top&&top.id.startsWith('hoodie')) add('path',{d:'M46 108C46 36 154 36 154 108l-12-6c0-36-84-36-84 0z',fill:colorCss(top),'data-part':'hoodie'});
   add('circle',{cx:100,cy:96,r:48,fill:fur});
   if(!top) add('ellipse',{cx:100,cy:188,rx:26,ry:24,fill:muzzle});
   if(top){
     const col=colorCss(top);
-    if(top.id==='hoodie'){
+    if(top.id.startsWith('hoodie')){
       add('ellipse',{cx:100,cy:168,rx:56,ry:40,fill:col,'data-part':'hoodie'});
       add('ellipse',{cx:44,cy:158,rx:16,ry:24,fill:col,'data-part':'hoodie'});
       add('ellipse',{cx:156,cy:158,rx:16,ry:24,fill:col,'data-part':'hoodie'});
       add('rect',{x:78,y:160,width:44,height:24,rx:10,fill:'rgba(0,0,0,.16)'});
-    }else if(top.id==='sundress'){
+    }else if(top.id.startsWith('sundress')){
       add('path',{d:'M68 132h64l6 22H62z',fill:col,'data-part':'sundress'});
       add('path',{d:'M58 154h84l16 70H42z',fill:col,'data-part':'sundress'});
       add('rect',{x:80,y:112,width:8,height:24,rx:3,fill:col,'data-part':'sundress'});
@@ -1468,7 +1479,7 @@ function flatBear(source,snapshot,thumb){
   add('circle',{cx:118,cy:88,r:1.5,fill:'#fff'});
   add('ellipse',{cx:100,cy:108,rx:6,ry:4.5,fill:'#3a2270'});
   add('path',{d:'M90 118q10 9 20 0',fill:'none',stroke:'#3a2270','stroke-width':'2.4','stroke-linecap':'round'});
-  if(top&&top.id==='hoodie') add('path',{d:'M62 74c10-20 66-20 76 0',fill:'none',stroke:colorCss(top),'stroke-width':'8','stroke-linecap':'round','data-part':'hoodie'});
+  if(top&&top.id.startsWith('hoodie')) add('path',{d:'M62 74c10-20 66-20 76 0',fill:'none',stroke:colorCss(top),'stroke-width':'8','stroke-linecap':'round','data-part':'hoodie'});
   return svg;
 }
 function readOrders(){
@@ -1514,13 +1525,16 @@ async function changeQty(id,qty){
   try{await commitOrders(s=>BearOrders.setQuantity(s,id,qty));renderConcept()}
   catch(e){cxToast(e.message)}
 }
+let addingCurrent=false;
 async function addCurrent(){
+  if(addingCurrent)return;
+  addingCurrent=true;
   try{
     const source=clone(cfg),price=total(cfg),preview=previews.capture(cfg);
     await commitOrders(s=>BearOrders.addItem(s,source,price,CLOTHES,preview));
     cxToast('В корзине');
     pushFlow('cart');
-  }catch(e){cxToast(e.message)}
+  }catch(e){cxToast(e.message)}finally{addingCurrent=false}
 }
 async function submitOrder(){
   const d=deliveryData();
@@ -1531,7 +1545,7 @@ async function submitOrder(){
   d.busy=true;
   renderConcept();
   try{
-    const next=await commitOrders(s=>BearOrders.checkout(s,d.pick));
+    const next=await commitOrders(s=>{if(JSON.stringify(s.cart)!==d.cartSnapshot)throw new Error('Корзина изменилась в другой вкладке. Вернитесь и проверьте состав.');return BearOrders.checkout(s,d.pick)});
     d.busy=false;
     pushFlow('confirm',{orderId:next.orders[0].id});
   }catch(e){
@@ -1728,9 +1742,9 @@ function deliveryView(){
     flatBear(state.cart[0].cfg,state.cart[0].clothing,true,state.cart[0].preview),
     el('div',{class:'cx-grow'},[el('div',{class:'cx-name'},'Демозаказ'),el('div',{class:'cx-sub'},state.cart.length+' компл. · '+rub(sum))])
   ]):el('p',{class:'cx-note'},'Корзина пуста.');
-  const btn=el('button',{class:'cx-primary',type:'submit'},d.busy?'Собираем…':'Создать заявку');
+  const btn=el('button',{class:'cx-primary',type:'submit'},'Проверить заявку');
   if(d.busy||!state.cart.length||state.error) btn.disabled=true;
-  return el('form',{class:'cx-view','data-concept':'delivery',onsubmit:e=>{e.preventDefault();submitOrder()}},[
+  return el('form',{class:'cx-view','data-concept':'delivery',onsubmit:e=>{e.preventDefault();d.error=deliveryError(d);if(d.error){renderConcept();return}pushFlow('review',{pick:d.pick,form:{...d.form},cartSnapshot:JSON.stringify(readOrders().cart)})}},[
     cxAppbar('Доставка'),
     el('div',{class:'cx-scroll'},[
       el('div',{class:'cx-hero-emoji','aria-hidden':'true'},'📦'),
@@ -1739,6 +1753,19 @@ function deliveryView(){
       el('p',{class:'cx-note'},'Демоформа: данные никуда не отправляются')
     ]),
     el('div',{class:'cx-foot'},[btn])
+  ]);
+}
+function reviewView(){
+  const d=deliveryData(),cart=JSON.parse(d.cartSnapshot||'[]'),method=BearOrders.deliveries.find(x=>x.id===d.pick),sum=cart.reduce((s,x)=>s+x.quantity*x.unitPrice,0);
+  const submit=el('button',{class:'cx-primary',type:'button',onclick:submitOrder},d.busy?'Сохраняем…':'Подтвердить демозаявку');submit.disabled=!!d.busy||!cart.length;
+  return el('div',{class:'cx-view','data-concept':'review'},[
+    cxAppbar('Проверьте заявку'),el('div',{class:'cx-scroll'},[
+      el('p',{class:'cx-note'},'Шаг 3 из 3 · состав и получение'),
+      ...cart.map(line=>el('div',{class:'cx-row'},[flatBear(line.cfg,line.clothing,true,line.preview),el('div',{class:'cx-grow'},[el('div',{class:'cx-name'},line.cfg.name||'Мой мишка'),el('div',{class:'cx-sub'},line.quantity+' шт. · '+rub(line.unitPrice)),el('div',{class:'cx-sub'},(line.clothing||[]).map(x=>x.label).join(', ')||'Базовая комплектация')]),el('b',{},rub(line.quantity*line.unitPrice))])),
+      el('div',{class:'cx-card-block'},[el('h2',{},'Получение'),el('p',{},method?.label||''),el('p',{},d.form.name+' · '+d.form.phone),el('p',{},d.pick==='courier'?d.form.address:'Тестовый пункт в мастерской'),el('button',{class:'cx-secondary',type:'button',onclick:popFlow},'Изменить данные')]),
+      el('div',{class:'cx-card-block'},[el('h2',{},'Оплата и изготовление'),el('p',{},'В прототипе оплата не проводится. Стоимость, сроки изготовления, доставка и совместимость деталей требуют подтверждения производства.'),el('p',{class:'cx-note'},'Контакты используются только для проверки формы и не включаются в сохранённый JSON. Реальный заказ не отправляется.')]),
+      d.error?el('p',{class:'cx-err',role:'alert'},d.error):null
+    ]),el('div',{class:'cx-foot'},[el('div',{class:'cx-total'},['Демонстрационная сумма',el('b',{},rub(sum))]),submit])
   ]);
 }
 function confirmView(){
@@ -1786,6 +1813,7 @@ function ordersView(){
   area.addEventListener('input',()=>{d.importText=area.value;d.importError=''});
   rows.push(el('div',{class:'cx-card-block'},[
     el('div',{class:'cx-name'},'Импорт JSON'),
+    el('label',{class:'cx-field'},['Открыть файл заявки',el('input',{type:'file',accept:'.json,application/json','aria-label':'Открыть файл заявки',onchange:async ev=>{const file=ev.target.files?.[0];if(!file)return;if(file.size>2000000){d.importError='Файл больше 2 МБ';renderConcept();return}try{d.importText=await file.text();await importJson()}catch(_){d.importError='Не удалось прочитать файл';renderConcept()}}})]),
     area,
     d.importError?el('p',{class:'cx-err',role:'alert'},d.importError):null
   ]));
@@ -1976,13 +2004,10 @@ function m3markHint(){
   return false;
 }
 function queueResult(){
-  const token=m3Token,score=M.score;
-  saveHi(score);
-  const reward=studio.reward(score);
-  setTimeout(()=>{
-    if(token!==m3Token||cxCur().id!=='games') return;
-    pushFlow('result',{score,reward});
-  },280);
+  const score=M.score;
+  const reward=studio.reward(score,M.runId,'match3');
+  if(studio.recordMatch3(score,M.runId))saveHi(score);
+  if(cxCur().id==='games'&&!document.getElementById('concept').hidden)pushFlow('result',{score,reward});
 }
 function tapGem(r,c){
   if(!M.board||M.moves<=0) return;
@@ -2045,7 +2070,7 @@ function gamesView(){
     ]),
     el('div',{class:'cx-foot'},el('div',{class:'cx-footrow'},[
       el('button',{class:'cx-cyan',type:'button',onclick:askHint},'Подсказка'),
-      el('button',{class:'cx-primary',type:'button',onclick(){m3new();renderConcept()}},'Заново')
+      el('button',{class:'cx-primary',type:'button',onclick(){studio.confirmRestart(()=>{if(m3new())renderConcept()})}},'Заново')
     ])),
     bottomNav('games')
   ]);
@@ -2064,7 +2089,7 @@ function resultView(){
       el('div',{class:'cx-card-block',style:'align-items:center'},[
         el('div',{class:'cx-sub'},'Очки'),
         el('div',{class:'cx-bignum',style:'color:#3a2270;font-size:40px'},String(score)),
-        ...(data.reward?[el('div',{class:'gm-round-reward'},'+'+data.reward+' монет · Мишка рад вашей победе')]:[])
+        el('div',{class:'gm-round-reward'},data.reward?'+'+data.reward+' монет · звёзды добавлены в кошелёк':'Награда за раунд уже сохранена')
       ]),
       el('p',{class:'cx-note'},'Рекорды устройства · локальные'),
       ...rows
@@ -2075,7 +2100,7 @@ function resultView(){
     ]))
   ]);
 }
-const CX_VIEWS={home:homeView,wardrobe:wardrobeView,look:lookView,cart:cartView,delivery:deliveryView,confirm:confirmView,orders:ordersView,assembly:assemblyView,share:shareView,world:worldView,games:gamesView,result:resultView};
+const CX_VIEWS={home:homeView,wardrobe:wardrobeView,look:lookView,cart:cartView,delivery:deliveryView,review:reviewView,confirm:confirmView,orders:ordersView,assembly:assemblyView,share:shareView,world:worldView,games:gamesView,result:resultView};
 function renderConcept(){
   const id=cxCur().id;
   document.body.dataset.screen=id;
@@ -2083,12 +2108,13 @@ function renderConcept(){
 }
 function showHub(id){
   if(!CX_HUBS[id]) return;
-  if(id==='games'&&(!M.board||M.moves<=0)) m3new();
+  if(id==='games'&&!M.board&&!m3new())return;
   cxStack=[{id,data:{}}];
   document.getElementById('concept').hidden=false;
   document.getElementById('cx-back').hidden=true;
   renderConcept();
   relayout();
+  if(id==='games'&&M.moves<=0)queueResult();
 }
 function pushFlow(id,data){
   cxStack.push({id,data:data||{}});
@@ -2167,13 +2193,21 @@ const studio = window.BearLabStudio.install({
   mountBear:host=>{if(!renderer)return;const target=host||stage;if(window.__pod)window.__pod.visible=!host;if(renderer.domElement.parentElement!==target){target.prepend(renderer.domElement);viewOff=0;resize();focusCam(false)}},
   resizeBear:()=>{resize();focusCam(false)},
   config:()=>cfg, is3d:()=>bearOn, set3d:v=>{bearOn=!!v&&!!renderer;if(v&&!renderer)cxToast('3D недоступно на этом устройстве');applyFlags();relayout()},
-  setName:v=>set('name',v), setSize:v=>set('size',v), setClothes:v=>set('clothes',v),
-  outfits:OUTFITS, catalog:CLOTHES, clothesPrice:clothesTotal, price:()=>total(cfg),
+  setName:v=>set('name',v), setSize:v=>set('size',v), setClothes:v=>set('clothes',v), setAcc:v=>set('acc',v),
+  presets:PRESETS, applyPreset:i=>{const p=PRESETS[i];if(p)applyCfg({...clone(DEF),...clone(p.c),name:cfg.name,size:cfg.size,clothes:[...cfg.clothes]},p.name)},
+  patchConfig:update=>applyCfg({...clone(cfg),...clone(update)},'Новый образ'), restoreConfig:c=>applyCfg(clone(c),'Образ восстановлен'),
+  playMatch3:()=>{if(M.board&&M.moves<=0&&!m3new())return;showHub('games')}, match3Progress:()=>M.board?{complete:M.moves<=0,moves:M.moves}:null,
+  outfits:OUTFITS, catalog:CLOTHES, accessories:ACC, clothesPrice:clothesTotal, price:()=>total(cfg),
   render:()=>renderConcept(), hub:id=>showHub(id), flow:(id,data)=>pushFlow(id,data),
   workshop:()=>showWorkshop(), closeAdmin:()=>closeAdmin(), toast:cxToast,
   bottom:id=>bottomNav(id), treat:()=>treatBear(), orders:()=>readOrders()
 });
-flatBear=studio.bear; CX_VIEWS.home=studio.home; CX_VIEWS.wardrobe=studio.wardrobe; CX_VIEWS.world=studio.world;
+flatBear=studio.bear; CX_VIEWS.home=studio.home; CX_VIEWS.wardrobe=studio.wardrobe; CX_VIEWS.world=studio.world; CX_VIEWS.arcade=studio.arcade;
+const roundKey='bearlab.match3.round.v1';
+function saveRound(){try{localStorage.setItem(roundKey,JSON.stringify({board:M.board,moves:M.moves,score:M.score,runId:M.runId}))}catch(_){cxToast('Раунд сохранён только в этой вкладке')}}
+try{const r=JSON.parse(localStorage.getItem(roundKey)||'null');if(r&&Array.isArray(r.board)&&r.board.length===7&&r.board.every(row=>Array.isArray(row)&&row.length===6&&row.every(v=>Number.isInteger(v)&&v>=0&&v<5))&&Number.isInteger(r.moves)&&r.moves>=0&&r.moves<=12&&Number.isInteger(r.score)&&r.score>=0&&typeof r.runId==='string'&&r.runId.length<100)Object.assign(M,r)}catch(_){}
+const newMatchRound=m3new;m3new=function(){const runId=crypto.randomUUID?.()||'match3-'+Date.now()+'-'+Math.random();if(!studio.canStart({gameId:'match3',runId}))return false;newMatchRound();M.runId=runId;saveRound();return true};
+const swapMatchGems=m3swap;m3swap=function(...args){const hit=swapMatchGems(...args);if(hit)saveRound();return hit};
 const originalBottomNav=bottomNav;bottomNav=function(id){return studio.bottom(id)||originalBottomNav(id)};
 openAdmin=studio.admin;
 const originalShowWorkshop=showWorkshop;showWorkshop=function(){originalShowWorkshop();studio.sync()};

@@ -2,10 +2,11 @@
 window.BearLabGame={install(api){
   const {e,art,go,icon}=api;
   const KEY='bearlab.pet.v1';
-  const defaults={coins:4250,stars:320,food:72,mood:86,energy:80,xp:240,gift:false,claimed:false,fed:false,styled:false,explored:false};
-  let pet={...defaults};
-  try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved&&typeof saved==='object')for(const k of Object.keys(defaults)){if(typeof saved[k]===typeof defaults[k])pet[k]=typeof saved[k]==='number'?Math.max(0,Math.min(999999,Math.round(saved[k]))):saved[k]}}catch(_){}
-  const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(pet))}catch(_){api.toast('Браузер не разрешил сохранить прогресс')}};
+  const Life=window.BearLabLifeModel;
+  let pet=Life.normalize(null);
+  try{pet=Life.normalize(JSON.parse(localStorage.getItem(KEY)||'null'))}catch(_){}
+  const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify(pet));return true}catch(_){api.toast('Браузер не разрешил сохранить прогресс');return false}};
+  function dispatch(action){const result=Life.transact(pet,action);if(!result.ok)return result;const previous=pet;pet=result.state;if(!persist()){pet=previous;return {...result,ok:false,message:'Не удалось сохранить. Действие не выполнено.'}}return result}
   const icons={food:0,games:1,wardrobe:2,world:3,home:4,collection:5,workshop:6,shop:7,backpack:8,gift:9,tasks:10,star:11,coin:12,heart:13,settings:14,honey:15};
   const gi=(name,cls='')=>e('span',{class:'gm-icon '+cls,'aria-hidden':'true',style:`--gx:${(icons[name]??11)%4*100/3}%;--gy:${Math.floor((icons[name]??11)/4)*100/3}%`});
   const b=(label,fn,cls='',children=[])=>e('button',{type:'button',class:cls,onclick:fn,'aria-label':label},children.length?children:label);
@@ -25,30 +26,17 @@ window.BearLabGame={install(api){
     panel.addEventListener('keydown',ev=>{if(ev.key==='Escape'){ev.preventDefault();ev.stopPropagation();close()}if(ev.key==='Tab'){const all=[...panel.querySelectorAll('button,input,select,a[href]')].filter(n=>!n.disabled);if(ev.shiftKey&&document.activeElement===all[0]){ev.preventDefault();all.at(-1)?.focus()}else if(!ev.shiftKey&&document.activeElement===all.at(-1)){ev.preventDefault();all[0]?.focus()}}});
     panel.querySelector('button')?.focus();
   }
-  function navigate(id){close();if(id==='world'){pet.explored=true;persist()}go(id)}
+  function navigate(id){if(id==='games')id='arcade';close();if(id==='world'){pet.explored=true;persist()}go(id)}
   const action=(label,name,fn,cls='')=>b(label,fn,'gm-action '+cls,[gi(name),e('strong',{},label)]);
   const primary=(label,fn)=>b(label,fn,'gm-primary');
-  function status(){open(api.config().name||'Мой мишка',[
-    e('div',{class:'gm-profile-art'},art(api.config())),e('p',{class:'gm-lead'},'Маленькая забота — большое счастье.'),
-    progress('Сытость',pet.food,'mint'),progress('Настроение',pet.mood,'pink'),progress('Энергия',pet.energy,'gold'),
-    primary('Отдохнуть вместе',()=>{pet.energy=Math.min(100,pet.energy+20);pet.mood=Math.min(100,pet.mood+5);persist();api.toast('Хорошо отдохнули! Энергия +20');status()}),
-    b('Настроить мишку',()=>navigate('workshop'),'gm-secondary')
-  ])}
+  let status;
   function hud(){return e('header',{class:'gm-hud'},[
     b('Состояние мишки',status,'gm-profile',[e('span',{class:'gm-avatar'},art(api.config(),true)),e('span',{},[e('strong',{},'Ур. '+(12+Math.floor(pet.xp/500))),e('span',{class:'gm-xp'},e('i',{style:`width:${pet.xp%500/5}%`}))])]),
     b('BearLab — домой',()=>navigate('home'),'gm-logo',[e('small',{},'THE'),e('span',{},['BE',e('em',{},'A'),'R',e('b',{},'LAB')])]),
     b('Баланс: '+number(pet.coins)+' монет и '+number(pet.stars)+' звёзд',wallet,'gm-wallet',[...['coin','star'].map((i,n)=>e('span',{class:'gm-currency'},[gi(i),e('b',{},number(n?pet.stars:pet.coins)),e('span',{class:'gm-plus'},'+')]))]),
   ])}
-  function wallet(){open('Мои награды',[
-    e('div',{class:'gm-wallet-summary'},[e('div',{},[gi('coin'),e('b',{},number(pet.coins)),e('span',{},'монет')]),e('div',{},[gi('star'),e('b',{},number(pet.stars)),e('span',{},'звёзд')])]),
-    e('p',{class:'gm-lead'},'Заботьтесь о мишке и выполняйте задания, чтобы получать награды.'),
-    primary('Открыть задания',tasks),e('p',{class:'gm-note'},'Демонстрационный баланс. Покупок за реальные деньги нет.')
-  ])}
-  function feed(){open('Время вкусненького',[
-    e('p',{class:'gm-lead'},'Чем угостим мишку?'),progress('Сытость',pet.food,'mint'),
-    e('div',{class:'gm-foods'},[['food','Хрустящие шарики',12],['honey','Медовый десерт',18]].map(([i,l,n])=>b(l,()=>{const before=pet.food;pet.food=Math.min(100,pet.food+n);pet.mood=Math.min(100,pet.mood+3);pet.fed=true;persist();close();api.render();api.treat();api.toast(before>=100?'Мишка сыт и рад вашему вниманию!':'Вкусно! Сытость +'+(pet.food-before))},'gm-food',[gi(i),e('strong',{},l),e('small',{},'Сытость +'+n)]))),
-    e('p',{class:'gm-note'},'Угощения в демоверсии доступны бесплатно.')
-  ])}
+  let wallet;
+  let feed;
   const missions=()=>[['fed','Угостить мишку','Поделитесь чем-нибудь вкусным','food',feed],['styled','Подобрать новый образ','Примерьте вещь в гардеробе','wardrobe',()=>navigate('wardrobe')],['explored','Заглянуть в город','Откройте карту маленького мира','world',()=>navigate('world')]];
   function tasks(){const done=missions().filter(([key])=>pet[key]).length;open('Маленькие приключения',[
     e('p',{class:'gm-lead'},'Три простых дела для большого дня.'),
@@ -60,56 +48,27 @@ window.BearLabGame={install(api){
     gi('gift','gm-big-icon'),e('h3',{class:'gm-centered'},pet.gift?'До новых приключений!':'100 монет в подарок'),e('p',{class:'gm-lead'},pet.gift?'Следующая награда ждёт за выполнение заданий.':'Добро пожаловать в маленький мир вашего мишки.'),
     primary(pet.gift?'Открыть задания':'Забрать подарок',()=>{if(pet.gift){tasks();return}pet.gift=true;pet.coins+=100;pet.xp+=20;persist();close();api.render();api.toast('Подарок ваш! +100 монет')})
   ])}
-  function season(){open('Сезон тёплых историй',[
-    e('div',{class:'gm-season-art'},[gi('collection'),gi('wardrobe'),gi('gift')]),
-    e('p',{class:'gm-lead'},'Уютный образ, любимые занятия и время вместе.'),
-    e('div',{class:'gm-season-steps'},[e('p',{},'01 · Позаботьтесь о мишке'),e('p',{},'02 · Соберите любимый образ'),e('p',{},'03 · Откройте маленький мир')]),
-    primary('Начать приключение',tasks)
-  ])}
-  function collection(){open('Моя коллекция',[
-    e('p',{class:'gm-lead'},'Три образа. Три маленькие истории.'),
-    e('div',{class:'gm-collection'},api.outfits.map((o,i)=>b(o.name,()=>{api.setClothes(o.clothes.slice());pet.styled=true;persist();navigate('wardrobe')},'gm-collect-card',[art({...api.config(),clothes:o.clothes},false,true),e('small',{},['ПЕРВАЯ ИСТОРИЯ','ГОРОДСКОЙ ДРУГ','ТЁПЛЫЙ ДЕНЬ'][i]||'МОЯ ИСТОРИЯ'),e('strong',{},o.name),e('span',{},'Примерить ›')]))),
-    e('p',{class:'gm-note'},'Все три комплекта доступны для примерки.')
-  ],'gm-wide')}
-  function shop(){open('Лавка мишки',[
-    e('div',{class:'gm-shop-intro'},[gi('shop'),e('div',{},[e('h3',{},'Из игры — в объятия'),e('p',{},'Соберите свой образ и посмотрите, каким может стать настоящий мишка.')])]),
-    primary('Выбрать одежду',()=>navigate('wardrobe')),b('Посмотреть моего мишку',()=>navigate('look'),'gm-secondary'),
-    b('Открыть корзину',()=>navigate('cart'),'gm-secondary'),e('p',{class:'gm-note'},'Это примерка и демонстрационная заявка. Цены требуют согласования с производством. Оплаты нет.')
-  ])}
-  function backpack(){const clothes=api.catalog.filter(it=>api.config().clothes.includes(it.id));open('Мой рюкзак',[
-    e('p',{class:'gm-lead'},'Всё для маленького приключения.'),
-    e('div',{class:'gm-bag-items'},[b('Угощения',feed,'gm-bag-item',[gi('food'),e('strong',{},'Угощения'),e('small',{},'Всегда с собой')]),b('Мой образ',()=>navigate('wardrobe'),'gm-bag-item',[gi('wardrobe'),e('strong',{},'Мой образ'),e('small',{},clothes.length?clothes.map(it=>it.label).join(', '):'Без одежды')]),b('Мои коллекции',collection,'gm-bag-item',[gi('collection'),e('strong',{},'Коллекции'),e('small',{},'3 доступных образа')])]),
-    b('Поделиться мишкой',()=>navigate('share'),'gm-secondary'),b('Мои демозаявки',()=>navigate('orders'),'gm-secondary')
-  ])}
+  let season;
+  let collection;
+  let shop;
+  let backpack;
   function nav(active='home'){return e('nav',{class:'gm-nav','aria-label':'Игровые разделы'},[
     ['home','Дом',()=>navigate('home')],['collection','Коллекция',collection],['workshop','Лаборатория',()=>navigate('workshop')],['shop','Магазин',shop],['backpack','Рюкзак',backpack]
   ].map(([i,l,fn])=>{const n=b(l,fn,'gm-nav-item',[gi(i),e('span',{},l)]);if(i===active)n.setAttribute('aria-current','page');return n}))}
   function home(){return e('div',{class:'cx-view gm-home','data-concept':'home'},[
     e('div',{class:'gm-scenery','aria-hidden':'true'}),hud(),
-    b('Сезон тёплых историй',season,'gm-season',[gi('collection'),e('span',{},[e('strong',{},'Сезон тёплых историй'),e('small',{},'Наряды, задания и маленькие открытия')]),e('b',{},'›')]),
+    b('Маленькие открытия',season,'gm-season',[gi('collection'),e('span',{},[e('strong',{},'Маленькие открытия'),e('small',{},'Палитры, задания и забота о друге')]),e('b',{},'›')]),
     e('div',{class:'gm-side gm-left'},[action('Награды','gift',gift,pet.gift?'':'gm-unread')]),
     e('div',{class:'gm-side gm-right'},[action('Задания','tasks',tasks),action('События','star',season)]),
-    e('div',{class:'gm-pet-space'},[e('div',{class:'gm-pet-shadow'}),e('div',{class:'gm-pet cx-hero'},art(api.config())),b('Погладить мишку',()=>{pet.mood=Math.min(100,pet.mood+2);persist();api.treat()},'gm-pet-touch'),e('div',{class:'gm-pet-name'},[e('strong',{},api.config().name||'Мой мишка'),e('span',{},'Рад быть рядом')])]),
+    e('div',{class:'gm-pet-space'},[e('div',{class:'gm-pet-shadow'}),e('div',{class:'gm-pet cx-hero'},art(api.config())),b('Погладить мишку',()=>{pet.mood=Math.min(100,pet.mood+2);persist();api.treat()},'gm-pet-touch'),e('div',{class:'gm-pet-name'},[e('strong',{},api.config().name||'Мой мишка'),b('Выбрать мишку',chooseBear,'gm-change-bear')])]),
     e('div',{class:'gm-main-actions'},[action('Кормить','food',feed,'mint'),action('Играть','games',()=>navigate('games'),'purple'),action('Одеть','wardrobe',()=>navigate('wardrobe'),'pink'),action('Исследовать','world',()=>navigate('world'),'mint')]),nav()
   ])}
-  function top(title){return e('header',{class:'gm-page-top'},[b('Домой',()=>navigate('home'),'gm-back','‹'),e('h1',{},title),b('Рюкзак',backpack,'gm-top-bag',[gi('backpack')])])}
-  let category='all';
-  function wardrobe(){const c=api.config();const restore=(selector,label)=>{[...document.querySelectorAll(selector)].find(n=>n.getAttribute('aria-label')===label)?.focus({preventScroll:true})};const repaint=(selector,label)=>{const positions=['.gm-dressing','.gm-closet'].map(q=>[q,document.querySelector(q)?.scrollTop||0]);api.render();for(const [q,y]of positions){const node=document.querySelector(q);if(node)node.scrollTop=y}restore(selector,label)};const choose=(ids,label,selector)=>{api.setClothes(ids);pet.styled=true;persist();repaint(selector,label)};const shown=api.catalog.filter(it=>category==='all'||it.slot===category);return e('div',{class:'cx-view gm-wardrobe','data-concept':'wardrobe'},[
-    top('Гардероб'),e('div',{class:'gm-dressing'},[
-      e('section',{class:'gm-fitting'},[e('div',{class:'gm-dressed cx-hero'},[e('div',{class:'gm-fitting-glow'}),art(c)]),e('div',{class:'gm-fit-name'},[e('strong',{},c.name||'Мой мишка'),e('small',{},'Ваш стиль. Ваша история.')]),b('Цвет и детали',()=>navigate('workshop'),'gm-fit-edit')]),
-      e('section',{class:'gm-closet'},[
-        e('h2',{},'Любимые образы'),e('div',{class:'gm-outfits'},api.outfits.map(o=>{const n=b(o.name,()=>choose(o.clothes.slice(),o.name,'.gm-outfit'),'gm-outfit',[art({...c,clothes:o.clothes},false,true),e('strong',{},o.name)]);n.setAttribute('aria-pressed',String(c.clothes.length===o.clothes.length&&c.clothes.every(x=>o.clothes.includes(x))));return n})),
-        e('h2',{},'Сочетайте по-своему'),e('div',{class:'gm-categories',role:'group','aria-label':'Категории одежды'},[['all','Всё'],['top','Одежда'],['feet','Обувь']].map(([id,l])=>{const n=b(l,()=>{category=id;repaint('.gm-categories button',l)},'');n.setAttribute('aria-pressed',String(id===category));return n})),
-        e('div',{class:'gm-garments'},shown.map(it=>{const n=b(it.label,()=>{let ids=c.clothes.filter(id=>id!==it.id);if(!c.clothes.includes(it.id))ids=ids.filter(id=>api.catalog.find(x=>x.id===id)?.slot!==it.slot).concat(it.id);choose(ids,it.label,'.gm-garment')},'gm-garment',[e('span',{class:'gm-garment-symbol'},icon(it.slot==='feet'?'spark':'wardrobe')),e('span',{},it.label),e('b',{},c.clothes.includes(it.id)?'✓':'+')]);n.setAttribute('aria-pressed',String(c.clothes.includes(it.id)));return n})),
-        primary('Готово — мой образ',()=>navigate('look')),e('p',{class:'gm-note'},'Примерка бесплатна. Выбранные вещи сохраняются.')
-      ])
-    ]),nav('collection')
-  ])}
+  function top(title){return e('header',{class:'gm-page-top'},[b('Домой',()=>navigate('home'),'gm-back',[icon('home')]),e('h1',{},title),b('Рюкзак',backpack,'gm-top-bag',[gi('backpack')])])}
   function world(){return e('div',{class:'cx-view gm-world','data-concept':'world'},[
     top('Маленький мир'),e('div',{class:'gm-world-map'},[
       e('img',{src:'assets/demo/world.png',alt:'Городок мишки с мастерской, гардеробом и игровым павильоном'}),
-      ...[['workshop','Лаборатория','Цвет и характер'],['wardrobe','Студия стиля','Примерьте новый образ'],['games','Игровой клуб','Три в ряд']].map(([id,l,desc])=>b(l,()=>navigate(id),'gm-place gm-place-'+id,[gi(id),e('span',{},[e('strong',{},l),e('small',{},desc)]),e('b',{},'›')]))
-    ]),e('p',{class:'gm-map-hint'},'Выберите место — приключение уже ждёт'),e('div',{class:'gm-world-guide'},[['workshop','Лаборатория','Создать своего мишку'],['wardrobe','Студия стиля','Найти любимый образ'],['games','Игровой клуб','Собрать три в ряд']].map(([id,label,desc])=>b(label,()=>navigate(id),'gm-world-card',[gi(id),e('strong',{},label),e('small',{},desc)]))),nav('')
+      ...[['workshop','Лаборатория','Цвет и характер'],['wardrobe','Студия стиля','Примерьте новый образ'],['games','Игровой клуб','Три мини-игры']].map(([id,l,desc])=>b(l,()=>navigate(id),'gm-place gm-place-'+id,[gi(id),e('span',{},[e('strong',{},l),e('small',{},desc)]),e('b',{},'›')]))
+    ]),e('p',{class:'gm-map-hint'},'Выберите место — приключение уже ждёт'),e('div',{class:'gm-world-guide'},[['workshop','Лаборатория','Создать своего мишку'],['wardrobe','Студия стиля','Найти любимый образ'],['games','Игровой клуб','Логика, память и маршруты']].map(([id,label,desc])=>b(label,()=>navigate(id),'gm-world-card',[gi(id),e('strong',{},label),e('small',{},desc)]))),nav('')
   ])}
   function comfort(){
     const prefs=api.preferences();
@@ -132,7 +91,48 @@ window.BearLabGame={install(api){
   });
   let previousScreen;
   function sync(){if(document.body.dataset.theme==='game'&&!document.querySelector('.gm-comfort-launch')){const launch=b('Удобство и управление',comfort,'gm-comfort-launch',[icon('comfort'),e('span',{},'Удобство')]);document.body.append(launch)}document.querySelector('.gm-comfort-launch')?.toggleAttribute('hidden',document.body.dataset.theme!=='game'||document.body.dataset.screen!=='home');const screen=document.body.dataset.screen;if(screen!==previousScreen)document.getElementById('cx-toast')?.classList.remove('on');previousScreen=screen;if(document.body.dataset.theme!=='game')close()}
-  function reward(score){const amount=Math.max(10,Math.min(200,Math.floor(score/10)));pet.coins+=amount;pet.xp+=30;pet.mood=Math.min(100,pet.mood+10);persist();return amount}
+  function reward(score,runId,gameId='match3'){const r=dispatch({type:'reward',gameId,runId,score});if(!r.ok&&!pet.rewardedRuns.includes(runId))throw new Error(r.message);return r.reward?.coins||0}
   const gem=index=>gi(['star','workshop','coin','heart','honey'][index]);
-  return {home,wardrobe,world,sync,close,nav,reward,gem};
+  const closet=window.BearLabWardrobe.install({...api,config:api.config,go:navigate,open,close,nav,styled:()=>{pet.styled=true;persist()}});
+  collection=closet.collection;
+  const arcade=window.BearLabArcade.install({e,render:api.render,home:()=>navigate('home'),playMatch3:api.playMatch3,match3Progress:api.match3Progress,reward:r=>reward(r.score,r.runId,r.gameId),playerName:()=>api.config().name,nav,icon,art,config:api.config,toast:api.toast,canStart:r=>canStart(r),energy:()=>({value:pet.energy,cost:10}),rest:()=>rest()});
+  function canStart(r){const result=dispatch({type:'startGame',...r});if(!result.ok){open('Нужно немного отдыха',[e('p',{class:'gm-lead'},result.message),primary('Отдохнуть бесплатно',()=>{rest();close();api.render()}),b('Домой',()=>navigate('home'),'gm-secondary')]);return false}return true}
+  function rest(){const r=dispatch({type:'rest'});api.toast(r.message)}
+  const life=window.BearLabLife.install({e,gi,art,config:api.config,open,close,toast:api.toast,getState:()=>pet,dispatch,render:api.render,go:navigate,treat:api.treat,applyReward:update=>{api.patchConfig(update)}});
+  status=life.status;feed=life.feed;backpack=life.inventory;
+  shop=function(){open('Лавка мишки',[
+    e('div',{class:'gm-shop-intro'},[gi('shop'),e('div',{},[e('h3',{},'Всё для вашего друга'),e('p',{},'Угощения для игры и настоящий мишка в вашем образе.')])]),
+    primary('Еда, вода и уход',life.market),b('Капсула вдохновения',life.capsule,'gm-secondary'),
+    e('hr'),e('h3',{},'Настоящий мишка'),e('p',{class:'gm-note'},'Ваш образ можно перенести в демонстрационную заявку. Состав и цена требуют проверки производства.'),
+    b('Собрать физического мишку',()=>navigate('look'),'gm-secondary'),b('Открыть корзину',()=>navigate('cart'),'gm-secondary')
+  ])};
+  wallet=function(){open('Монеты и звёзды',[
+    e('div',{class:'gm-wallet-summary'},[e('div',{},[gi('coin'),e('b',{},number(pet.coins)),e('span',{},'монет на заботу')]),e('div',{},[gi('star'),e('b',{},number(pet.stars)),e('span',{},'всего звёзд')])]),
+    e('p',{class:'gm-lead'},'Играйте, зарабатывайте и заботьтесь о мишке.'),primary('Заработать в мини-играх',()=>navigate('arcade')),b('Купить еду и воду',life.market,'gm-secondary'),b('Открыть новую палитру',life.capsule,'gm-secondary'),e('p',{class:'gm-note'},'Для капсул заработано '+pet.earnedStars+' звёзд. Начальные демонстрационные звёзды в капсулах не тратятся. Покупки валюты за деньги нет.')
+  ])};
+  season=function(){open('Мастерская маленьких открытий',[
+    e('div',{class:'gm-season-art'},[gi('collection'),gi('wardrobe'),gi('gift')]),e('p',{class:'gm-lead'},'Новая палитра, любимый образ и забота о друге.'),
+    primary('Открыть палитры',life.capsule),b('Задания и награды',tasks,'gm-secondary'),b('Салон красок',salon,'gm-secondary'),b('Выбрать мишку',chooseBear,'gm-secondary')
+  ])};
+  let bearUndo=null;
+  function chooseBear(){const c=api.config();open('Выберите своего мишку',[
+    e('p',{class:'gm-lead'},'Все 12 исходных характеров. После выбора можно изменить каждую деталь в лаборатории.'),
+    e('div',{class:'gm-bear-choice'},[e('div',{class:'gm-choice-preview'},art(c)),e('div',{class:'gm-preset-list'},api.presets.map((p,i)=>b(p.name,()=>{bearUndo=JSON.parse(JSON.stringify(api.config()));api.applyPreset(i);api.render();chooseBear()},'gm-preset-choice',[e('strong',{},p.name),e('small',{},p.d)])))]),
+    bearUndo?b('Вернуть предыдущего мишку',()=>{api.restoreConfig(bearUndo);bearUndo=null;api.render();chooseBear()},'gm-secondary'):null,
+    primary('Готово — домой',()=>navigate('home')),b('Все детали в лаборатории',()=>navigate('workshop'),'gm-secondary')
+  ],'gm-wide')}
+  function salon(){const c=api.config();open('Салон красок',[
+    e('div',{class:'gm-profile-art'},art(c)),e('p',{class:'gm-lead'},'Мех, узоры и румянец. Все изменения сразу видны на вашем мишке.'),
+    e('div',{class:'gm-salon-colors'},[['Мёд','#c98b4f'],['Крем','#f5efe6'],['Лаванда','#b197d0'],['Розовый','#ffc7de'],['Мята','#68c8b4'],['Ночь','#2b2b2e']].map(([label,color])=>b(label,()=>{bearUndo=JSON.parse(JSON.stringify(c));api.patchConfig({main:color});api.render();salon()},'gm-salon-swatch',[e('i',{style:'background:'+color}),e('span',{},label)]))),
+    e('div',{class:'gm-salon-patterns'},[['none','Без узора'],['hearts','Сердечки'],['stars','Звёздочки'],['spots','Пятнышки'],['stripes','Полоски']].map(([pattern,label])=>e('button',{type:'button',class:'gm-secondary','aria-pressed':String(c.pattern===pattern),onclick:()=>{bearUndo=JSON.parse(JSON.stringify(c));api.patchConfig({pattern});api.render();salon()}},label))),
+    b(c.blush?'Убрать румянец':'Добавить румянец',()=>{bearUndo=JSON.parse(JSON.stringify(c));api.patchConfig({blush:!c.blush});api.render();salon()},'gm-secondary'),
+    bearUndo?b('Отменить изменение',()=>{api.restoreConfig(bearUndo);bearUndo=null;api.render();salon()},'gm-secondary'):null,
+    primary('Готово — домой',()=>navigate('home')),b('Точная настройка цветов',()=>navigate('workshop'),'gm-secondary')
+  ])}
+  let activeAt=Date.now();setInterval(()=>{const now=Date.now(),seconds=Math.min(15,Math.floor((now-activeAt)/1000));activeAt=now;if(!document.hidden&&document.hasFocus()&&document.body.dataset.theme==='game')dispatch({type:'tick',active:true,seconds})},15000);
+  window.addEventListener('storage',event=>{if(event.key===KEY){try{pet=Life.normalize(JSON.parse(event.newValue))}catch(_){}}});
+  function demoControls(){const values={...pet};const fields=[['coins','Монеты',999999],['stars','Всего звёзд',999999],['earnedStars','Заработанные звёзды',999999],['energy','Энергия',100],['food','Сытость',100],['thirst','Вода',100],['hygiene','Чистота',100],['mood','Настроение',100]];
+    return e('details',{class:'gm-demo-controls'},[e('summary',{},'Тестовое состояние игры'),e('p',{},'Для проверки сценариев: нехватка энергии, покупка еды, открытие капсулы. Меняет только данные этого браузера.'),e('div',{class:'gm-demo-fields'},fields.map(([key,label,max])=>e('label',{},[label,e('input',{type:'number',min:0,max,value:pet[key],'aria-label':'Тест: '+label,oninput:event=>{values[key]=Number(event.target.value)}})]))),b('Применить тестовое состояние',()=>{pet=Life.normalize({...pet,...Object.fromEntries(fields.map(([key])=>[key,values[key]]))});persist();api.render();api.toast('Тестовые показатели применены')},'gm-secondary')])
+  }
+  return {home,wardrobe:closet.view,world,sync,close,nav,reward,gem,arcade:arcade.view,recordMatch3:arcade.recordMatch3,canStart,demoControls,confirmRestart:callback=>open('Начать новый раунд?',[e('p',{class:'gm-lead'},'Текущее поле сбросится. Новый раунд стоит 10 энергии.'),primary('Да, новый раунд',()=>{close();callback()}),b('Продолжить этот раунд',close,'gm-secondary')])};
 }};
