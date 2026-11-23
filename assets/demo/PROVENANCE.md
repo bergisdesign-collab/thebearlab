@@ -1,0 +1,19 @@
+# Иллюстрации · проба, не утверждено
+
+Все изображения этой папки — созданные ИИ пробы для демонстрации, не утверждённые производственные материалы. Сторонние игровые ассеты не извлекались.
+
+`bear-atlas.png` и `world.png` — ранее подготовленные для этой ветки атлас трёх образов × трёх вариантов обуви и карта мастерской/гардероба/игры. Повторно используются без изменения.
+
+23 ноября 2026, Codex, встроенный `image_gen`:
+
+- `garden.png`: исходник `/home/ubuntu/.codex/generated_images/01a202fa-5a08-77d1-bec2-e9b82908dad7/exec-594e9c2f-1b30-40bd-b562-27ffddaf5cab.png`.
+- `game-icons.png`: исходник в той же папке `exec-887bbd71-b2fb-4df2-9792-53e15492d0cc.png`; прозрачный атлас 4×4.
+- Референс для обоих: пользовательское изображение №9 `moshi-paste-1290572782.png`. Изображение просмотрено до генерации. Фон и значки созданы отдельно; текст, кнопки и состояние рисуются DOM.
+
+## Запрос: фон
+
+Use case: stylized-concept. Create ONLY a reusable game environment background plate, NO character and NO user interface. Input reference is a style/environment reference, not a screen to reproduce. BearLab cozy virtual pet garden, premium polished 3D animated family game render. Landscape 3:2 composition that can also be center-cropped portrait: sunny turquoise blue sky, charming toy village, rounded cream cottage with purple roof on right, round astronomical workshop with teal dome and gold telescope on left, lavender flowering bushes and rich green grass around edges, gentle curved stepping stone path and broad EMPTY circular grassy clearing in central foreground where a separate teddy sprite will be composited. Camera at a small teddy eye level, not top-down. Clear large open central area, distant houses occupy outer thirds. Rounded tactile materials, playful lush vegetation, warm honey sunlight, detailed painterly 3D textures, airy bright sky top third. Match appealing rich turquoise/lilac/gold palette and soft rendered depth of reference. Fill entire image edge to edge. Absolutely no teddy bear, no humans, no icons, no symbols, no labels, no lettering, no logo, no buttons, no frames, no watermarks. The image will sit behind live HTML UI and a separate teddy, not be used as a static mockup.
+
+## Запрос: значки
+
+Use case: stylized-concept. Asset type: GAME ICON SPRITE SHEET, TRANSPARENT alpha background. Reference for polished tactile 3D toy game icon material only. Produce precisely 4 columns by 4 rows evenly spaced equal-size square cells, all 16 objects separately centered within their cell, isolated, each occupies 72% cell width and 72% cell height leaving generous consistent transparent padding. Nothing touches adjoining cells. No text, no labels, no UI button backgrounds, no panels, no borders. Row1 left to right: (1) lavender food bowl full of golden round pet treats (2) white and lavender game controller (3) salmon pink hoodie with tiny gold teddy patch (4) folded cream green map with pink location pin. Row2: (5) golden yellow toy house (6) three overlapping peach and purple collectible teddy cards (7) round glass laboratory flask with glowing purple potion (8) tiny storefront with magenta and lilac striped awning. Row3: (9) purple soft backpack with gold clasp (10) purple gift box with enormous yellow ribbon (11) lavender clipboard calendar with gold checkmark (12) golden chunky five-point star. Row4: (13) gold coin embossed paw (14) glossy coral pink heart (15) lavender chunky settings cog (16) warm honey jar with wooden dipper. Cohesive premium casual mobile game rendering, rounded forms, soft cream rim highlights, rich lilac pink turquoise gold, dimensional soft shadows kept inside each cell. Straight-on slight 3/4 view. Consistent scale and lighting, perfectly aligned regular 4x4 atlas, genuine transparent background. No character, no screenshot.

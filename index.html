@@ -379,6 +379,8 @@ body[data-screen="result"] #concept{background:radial-gradient(120% 90% at 50% 1
 }
 </style>
 <link rel="stylesheet" href="sandbox/studio-ui.css">
+<link rel="stylesheet" href="sandbox/game-ui.css">
+<script src="sandbox/game-ui.js"></script>
 <script src="sandbox/studio-ui.js"></script>
 <script src="sandbox/bear-preview.js"></script>
 </head>
@@ -520,7 +522,7 @@ const TABS=[
 ];
 
 /* ============ STATE ============ */
-let cfg=load()||clone(DEF);
+let cfg=load()||Object.assign(clone(DEF),{clothes:['hoodie','sneakers']});
 let mode='kid', tab='presets';
 const hist=[JSON.stringify(cfg)]; let hi=0;
 function clone(o){return JSON.parse(JSON.stringify(o))}
@@ -837,18 +839,19 @@ function buildEar(eg,c,e,s,set){
 }
 function buildClothes(c,B,g,opt={}){
   const has=id=>(c.clothes||[]).includes(id);
+  const garmentColor=id=>CLOTHES.find(it=>it.id===id).color;
   const furL=opt.furL!=null?opt.furL:0, out=1+furL*0.5;
-  if(has('hoodie')){const m=std('#e8554e',{roughness:.95});
+  if(has('hoodie')){const m=std(garmentColor('hoodie'),{roughness:.95});
     const torso=mesh(ellip(B.x*1.07*out,B.y*0.58,B.z*1.07*out,40,28),m);torso.position.y=B.y*0.10;g.add(torso);
     const col=mesh(new THREE.TorusGeometry(B.x*0.66,B.x*0.15,12,32),m);col.rotation.x=Math.PI/2;col.position.y=B.y*0.66;g.add(col)}
-  if(has('tshirt')){const m=std('#4dabf7',{roughness:.9});
+  if(has('tshirt')){const m=std(garmentColor('tshirt'),{roughness:.9});
     const torso=mesh(ellip(B.x*1.05*out,B.y*0.5,B.z*1.05*out,40,28),m);torso.position.y=B.y*0.18;g.add(torso)}
-  if(has('sundress')){const m=std('#f06595',{roughness:.88});m.side=THREE.DoubleSide;
+  if(has('sundress')){const m=std(garmentColor('sundress'),{roughness:.88});m.side=THREE.DoubleSide;
     const bod=mesh(ellip(B.x*1.05*out,B.y*0.46,B.z*1.05*out,40,28),m);bod.position.y=B.y*0.2;g.add(bod);
     const sk=mesh(new THREE.CylinderGeometry(B.x*0.86,B.x*1.5,B.y*0.92,36,1,true),m);sk.position.y=-B.y*0.34;g.add(sk)}
   const feet=(col,tall)=>{[-1,1].forEach(s=>{const sh=mesh(ellip(B.x*0.27,B.y*(tall?0.34:0.17),B.z*0.42,20,14),std(col,{roughness:.85}));sh.position.set(s*B.x*0.42,-B.y*0.96,B.z*0.16);g.add(sh)})};
-  if(has('sneakers'))feet('#f2f2f2',false);
-  if(has('boots'))feet('#5b3b1f',true);
+  if(has('sneakers'))feet(garmentColor('sneakers'),false);
+  if(has('boots'))feet(garmentColor('boots'),true);
 }
 function buildAcc(c,head,H,hr,B,g,opt={}){
   const has=id=>c.acc.includes(id);
@@ -943,7 +946,7 @@ let act=null,glb=null,viewOff=0;
 function play(name){const m=MOVES.find(x=>x[0]===name);act={name,t:0,dur:{wave:2.2,dance:4.2,jump:1.15,spin:1.5,hug:2.8,sleep:5.5,clap:2.6,bow:1.9}[name]||2};if(name==='wave')wave=1;say(m?m[3]:'');renderMovesState()}
 const easeIO=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
 let FR=0,lastErr='';const DBG=location.hash==='#debug';let dbgEl=null;if(DBG){dbgEl=document.createElement('div');dbgEl.style.cssText='position:fixed;left:8px;top:70px;z-index:99;background:#000c;color:#0f0;font:12px monospace;padding:6px;white-space:pre;pointer-events:none';document.body.append(dbgEl)}
-function loop(){if (!renderer) return;requestAnimationFrame(loop);if (document.hidden || document.querySelector('dialog[open]') || !document.getElementById('cx-admin').hidden || !document.getElementById('modal').hidden) return;if (document.body.dataset.screen !== 'workshop' && document.body.dataset.bear !== 'on') return;FR++;try{loop0()}catch(err){if(String(err)!==lastErr){lastErr=String(err)+' @'+((err.stack||'').split('\n')[1]||'');console.error(err);say('Ошибка: '+err.message)}}
+function loop(){if (!renderer) return;requestAnimationFrame(loop);if (document.hidden || document.querySelector('dialog[open], .gm-overlay') || !document.getElementById('cx-admin').hidden || !document.getElementById('modal').hidden) return;if (document.body.dataset.screen !== 'workshop' && document.body.dataset.bear !== 'on') return;FR++;try{loop0()}catch(err){if(String(err)!==lastErr){lastErr=String(err)+' @'+((err.stack||'').split('\n')[1]||'');console.error(err);say('Ошибка: '+err.message)}}
   if(DBG&&FR%10===0)dbgEl.textContent=`fr ${FR}\nact ${act?act.name+' '+act.t.toFixed(2):'-'}\nglb ${!!glb} rig ${!!(glb&&glb.rig)}\nwave ${wave.toFixed(2)}\nerr ${lastErr}`}
 function loop0(){
   const moving=document.body.dataset.motion!=='off',elapsed=Math.min(clock.getDelta(),.05),dt=moving?elapsed:0,t=moving?clock.elapsedTime:0;
@@ -1319,7 +1322,7 @@ const modal=document.getElementById('modal');
 function openModal(node,small){modal.innerHTML='';const sh=el('div',{class:'sheet'+(small?' small':''),role:'dialog','aria-modal':'true'});sh.append(...[].concat(node));modal.append(sh);modal.hidden=false;const f=sh.querySelector('button,input');f&&f.focus()}
 function closeModal(){modal.hidden=true;modal.innerHTML=''}
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&modal.hidden&&!document.querySelector('dialog[open]')&&!document.activeElement.matches('input, textarea, [contenteditable]')){e.preventDefault();goHist(e.shiftKey?1:-1)}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&modal.hidden&&!document.querySelector('dialog[open], .gm-overlay')&&!document.activeElement.matches('input, textarea, [contenteditable]')){e.preventDefault();goHist(e.shiftKey?1:-1)}});
 document.getElementById('reset').onclick=()=>{openModal([el('div',{class:'body'},[el('h3',{},'Начать заново?'),el('p',{class:'note'},'Мишка вернётся к классическому. Отменить можно стрелкой назад.'),el('div',{class:'acts'},[el('button',{class:'btn go',onclick:()=>{closeModal();applyCfg(clone(DEF),'Новый мишка!')}},'Да, заново'),el('button',{class:'btn g',onclick:closeModal},'Оставить')])])],true)};
 const enc=c=>{const d={};for(const k in c)if(JSON.stringify(c[k])!==JSON.stringify(DEF[k]))d[k]=c[k];return 'BEAR-'+btoa(unescape(encodeURIComponent(JSON.stringify(d)))).replace(/=+$/,'')};
 const dec=s=>{if(s.length>16000)throw new Error('Слишком длинный код');const b=s.trim().replace(/^BEAR-/i,'');return readConfig(JSON.parse(decodeURIComponent(escape(atob(b)))))};
@@ -1665,6 +1668,7 @@ function lookView(){
       el('div',{class:'cx-actions'},[
         chipsOf(cfg.clothes),
         el('div',{class:'cx-bignum'},rub(total(cfg))),
+        el('p',{class:'cx-note'},'Демонстрационная цена · без оплаты'),
         el('button',{class:'cx-primary',type:'button',onclick:addCurrent},'В корзину'),
         el('button',{class:'cx-cyan',type:'button',onclick:()=>pushFlow('share')},'Поделиться')
       ])
@@ -1974,9 +1978,10 @@ function m3markHint(){
 function queueResult(){
   const token=m3Token,score=M.score;
   saveHi(score);
+  const reward=studio.reward(score);
   setTimeout(()=>{
     if(token!==m3Token||cxCur().id!=='games') return;
-    pushFlow('result',{score});
+    pushFlow('result',{score,reward});
   },280);
 }
 function tapGem(r,c){
@@ -2019,9 +2024,9 @@ function gamesView(){
       class:'cx-gem'+(hint?' cx-hint':''),
       type:'button',
       'aria-pressed':String(!!on),
-      'aria-label':GEM_NAME[gem]||'фишка',
+      'aria-label':document.body.dataset.theme==='game'?['звезда','зелье','монета','сердце','мёд'][gem]:GEM_NAME[gem]||'фишка',
       onclick:()=>tapGem(r,c)
-    },M.gems[gem]||'•'));
+    },studio.gem(gem)||M.gems[gem]||'•'));
   }
   return el('div',{class:'cx-view','data-concept':'games'},[
     cxAppbar('Три в ряд',false),
@@ -2052,7 +2057,8 @@ function resultView(){
       el('div',{class:'cx-hero-emoji','aria-hidden':'true'},'🏆'),
       el('div',{class:'cx-card-block',style:'align-items:center'},[
         el('div',{class:'cx-sub'},'Очки'),
-        el('div',{class:'cx-bignum',style:'color:#3a2270;font-size:40px'},String(score))
+        el('div',{class:'cx-bignum',style:'color:#3a2270;font-size:40px'},String(score)),
+        ...(data.reward?[el('div',{class:'gm-round-reward'},'+'+data.reward+' монет · Мишка рад вашей победе')]:[])
       ]),
       el('p',{class:'cx-note'},'Рекорды устройства · локальные'),
       ...rows
@@ -2162,6 +2168,7 @@ const studio = window.BearLabStudio.install({
   bottom:id=>bottomNav(id), treat:()=>treatBear(), orders:()=>readOrders()
 });
 flatBear=studio.bear; CX_VIEWS.home=studio.home; CX_VIEWS.wardrobe=studio.wardrobe; CX_VIEWS.world=studio.world;
+const originalBottomNav=bottomNav;bottomNav=function(id){return studio.bottom(id)||originalBottomNav(id)};
 openAdmin=studio.admin;
 const originalShowWorkshop=showWorkshop;showWorkshop=function(){originalShowWorkshop();studio.sync()};
 document.getElementById('open-cart').onclick=()=>pushFlow('cart');
