@@ -290,6 +290,32 @@ body[data-bear="on"] .cx-hero .cx-flat{visibility:hidden}
 .cx-swatch{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:20px;flex:none}
 .cx-textbtn{border:0;background:#f3ecdf;color:#3a2270;border-radius:12px;font:inherit;font-weight:800;font-size:12px;padding:8px 6px;cursor:pointer}
 .cx-hero-emoji{font-size:64px;text-align:center;line-height:1}
+.cx-plaza{pointer-events:auto;position:relative;flex:1;min-height:240px;margin:8px 16px 12px;border-radius:22px;overflow:hidden;
+  background:
+    radial-gradient(18px 14px at 20% 72%, rgba(255,244,224,.18), transparent 70%),
+    radial-gradient(18px 14px at 78% 64%, rgba(255,244,224,.14), transparent 70%),
+    repeating-linear-gradient(45deg,#6a4db0,#6a4db0 16px,#5d439c 16px,#5d439c 32px)}
+.cx-spot{position:absolute;border:0;border-radius:18px;min-width:108px;padding:14px 12px;color:#fff;font:inherit;font-weight:800;font-size:15px;
+  display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;box-shadow:0 5px 0 rgba(42,24,72,.35)}
+.cx-spot span{font-size:32px;line-height:1}
+.cx-spot:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(42,24,72,.35)}
+.cx-spot.mid{left:50%;bottom:12%;transform:translateX(-50%)}
+.cx-spot.mid:active{transform:translateX(-50%) translateY(3px)}
+.cx-play{pointer-events:auto;flex:1;min-height:0;overflow:auto;padding:4px 16px 8px;display:flex;flex-direction:column;gap:8px}
+.cx-m3top{display:flex;gap:8px}
+.cx-m3stat{flex:1;background:#4a3178;border-radius:16px;padding:8px 10px;text-align:center;font-weight:800;font-size:13px;color:#fff4e0}
+.cx-m3stat b{display:block;font-size:22px;color:#ffce3a;font-variant-numeric:tabular-nums}
+.cx-grid{display:grid;gap:4px;width:100%;max-width:360px;margin:0 auto;background:#4a3178;padding:8px;border-radius:18px}
+.cx-gem{aspect-ratio:1;width:100%;min-width:0;border:0;border-radius:12px;background:rgba(0,0,0,.22);font-size:clamp(16px,5.2vw,26px);line-height:1;cursor:pointer;padding:0}
+.cx-gem[aria-pressed="true"]{outline:3px solid #ffce3a;transform:scale(.92)}
+.cx-gem.cx-hint{box-shadow:inset 0 0 0 3px #43d6e0}
+.cx-lb{display:flex;justify-content:space-between;background:#f3ecdf;color:#3a2270;border-radius:12px;padding:10px 14px;font-weight:800}
+.cx-footrow{display:flex;gap:8px}
+.cx-footrow>*{flex:1;min-width:0}
+.cx-sec{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#c9b8e8;margin:14px 0 8px}
+.cx-map{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cx-map button{border:0;border-radius:12px;padding:12px 8px;background:#3a2663;color:#fff4e0;font:inherit;font-weight:800;font-size:13px;cursor:pointer}
+.cx-map button:active{transform:scale(.98)}
 body.beauty .stage{background:
   radial-gradient(80% 42% at 50% 100%, rgba(255,206,58,.2), transparent 62%),
   radial-gradient(120% 85% at 50% 16%, #7b5bc8, #4a2f86 50%, #2c1a4e)}
@@ -311,7 +337,10 @@ body[data-screen="cart"] #concept,
 body[data-screen="delivery"] #concept,
 body[data-screen="confirm"] #concept,
 body[data-screen="orders"] #concept,
-body[data-screen="assembly"] #concept{background:radial-gradient(120% 90% at 50% 18%, #6d4cb8, #4a2f86 46%, #3a2568);pointer-events:auto}
+body[data-screen="assembly"] #concept,
+body[data-screen="world"] #concept,
+body[data-screen="games"] #concept,
+body[data-screen="result"] #concept{background:radial-gradient(120% 90% at 50% 18%, #6d4cb8, #4a2f86 46%, #3a2568);pointer-events:auto}
 #cx-gear{position:fixed;z-index:70;top:calc(10px + env(safe-area-inset-top));right:max(10px, env(safe-area-inset-right));
   width:40px;height:40px;border:0;border-radius:12px;background:#f3ecdf;color:#3a2270;font-size:20px;cursor:pointer;box-shadow:0 4px 0 rgba(42,24,72,.28)}
 #cx-back{position:fixed;z-index:60;left:max(12px, env(safe-area-inset-left));top:calc(72px + env(safe-area-inset-top));
@@ -344,7 +373,8 @@ body[data-screen="assembly"] #concept{background:radial-gradient(120% 90% at 50%
   body[data-screen="workshop"] #cx-gear{top:calc(74px + env(safe-area-inset-top))}
 }
 @media (prefers-reduced-motion:reduce){
-  .cx-primary:active,.cx-secondary:active,.cx-card:active,#cx-back:active{transform:none}
+  .cx-primary:active,.cx-secondary:active,.cx-card:active,#cx-back:active,.cx-spot:active,.cx-gem[aria-pressed="true"]{transform:none}
+  .cx-spot.mid:active{transform:translateX(-50%)}
 }
 </style>
 <link rel="stylesheet" href="sandbox/studio-ui.css">
@@ -1329,6 +1359,7 @@ document.getElementById('loading').remove();
 /* ============ CONCEPT: мишка и маршрут заказа ============ */
 let beautyOn=false,bearOn=false,toastT=0,checkoutStarted=false;
 let cxStack=[{id:'home',data:{}}];
+const CX_HUBS={home:1,wardrobe:1,world:1,games:1};
 const OUTFIT_EMOJI={База:'🧸',Худи:'🧥',Сарафан:'👗'};
 const SVGNS='http://www.w3.org/2000/svg';
 function cxCur(){return cxStack[cxStack.length-1]}
@@ -1565,7 +1596,6 @@ function bottomNav(active){
   return el('nav',{class:'cx-nav','aria-label':'Разделы'},[['home','🏠','Дом'],['wardrobe','🧥','Гардероб'],['world','🗺️','Мир'],['games','🎮','Игры']].map(([id,icon,label])=>{
     const props={type:'button',onclick:()=>showHub(id)};
     if(id===active) props['aria-current']='page';
-    else if(id==='world'||id==='games') props.title='недоступно';
     return el('button',props,[el('span',{'aria-hidden':'true'},icon),label]);
   }));
 }
@@ -1581,11 +1611,10 @@ function conceptHud(){
 }
 function conceptHero(){return el('div',{class:'cx-hero'},flatBear(cfg))}
 function cxAppbar(title,onBack,right){
-  return el('div',{class:'cx-appbar'},[
-    el('button',{class:'cx-backbtn',type:'button',onclick:onBack||popFlow,'aria-label':'Назад'},'‹'),
-    el('h1',{},title),
-    right||el('span')
-  ]);
+  const back=onBack===false
+    ? el('span')
+    : el('button',{class:'cx-backbtn',type:'button',onclick:onBack||popFlow,'aria-label':'Назад'},'‹');
+  return el('div',{class:'cx-appbar'},[back,el('h1',{},title),right||el('span')]);
 }
 function chipsOf(ids){
   const labels=(ids||[]).map(id=>CLOTHES.find(a=>a.id===id)?.label).filter(Boolean);
@@ -1829,15 +1858,217 @@ function shareView(){
     ])
   ]);
 }
-const CX_VIEWS={home:homeView,wardrobe:wardrobeView,look:lookView,cart:cartView,delivery:deliveryView,confirm:confirmView,orders:ordersView,assembly:assemblyView,share:shareView};
+const HI_KEY='bearlab.proto.hi';
+const GEM_NAME=['звезда','нитка','пуговица','лапка','ягода'];
+const M={cols:6,rows:7,gems:['⭐','🧵','🔘','🐾','🍓'],board:null,sel:null,hint:null,score:0,moves:12,shuffled:false};
+let m3Token=0;
+function loadHi(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(HI_KEY)||'[]');
+    return Array.isArray(raw)?raw.filter(n=>typeof n==='number'&&Number.isFinite(n)).slice(0,5):[];
+  }catch(e){return []}
+}
+function saveHi(score){
+  try{
+    const hi=loadHi();
+    hi.push(score);
+    hi.sort((a,b)=>b-a);
+    localStorage.setItem(HI_KEY,JSON.stringify(hi.slice(0,5)));
+  }catch(e){}
+}
+function m3find(){
+  const h={},b=M.board;
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++){
+    if(c<M.cols-2&&b[r][c]===b[r][c+1]&&b[r][c]===b[r][c+2]) h[r+'_'+c]=h[r+'_'+(c+1)]=h[r+'_'+(c+2)]=1;
+    if(r<M.rows-2&&b[r][c]===b[r+1][c]&&b[r][c]===b[r+2][c]) h[r+'_'+c]=h[(r+1)+'_'+c]=h[(r+2)+'_'+c]=1;
+  }
+  return h;
+}
+function m3res(silent){
+  for(let g=0;g<30;g++){
+    const keys=Object.keys(m3find());
+    if(!keys.length) break;
+    if(!silent) M.score+=keys.length*10;
+    keys.forEach(key=>{const p=key.split('_');M.board[+p[0]][+p[1]]=-1});
+    for(let c=0;c<M.cols;c++){
+      const col=[];
+      for(let r=M.rows-1;r>=0;r--) if(M.board[r][c]>=0) col.push(M.board[r][c]);
+      while(col.length<M.rows) col.push(Math.floor(Math.random()*M.gems.length));
+      for(let r=M.rows-1,i=0;r>=0;r--,i++) M.board[r][c]=col[i];
+    }
+  }
+}
+function m3try(r1,c1,r2,c2){
+  const b=M.board,t=b[r1][c1];
+  b[r1][c1]=b[r2][c2];b[r2][c2]=t;
+  const ok=Object.keys(m3find()).length>0;
+  b[r1][c1]=b[r2][c2];b[r2][c2]=t;
+  return ok;
+}
+function m3hasMove(){
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++){
+    if(c+1<M.cols&&m3try(r,c,r,c+1)) return true;
+    if(r+1<M.rows&&m3try(r,c,r+1,c)) return true;
+  }
+  return false;
+}
+function m3seed(){
+  if(!M.board||M.board.length!==M.rows){
+    M.board=[];
+    for(let r=0;r<M.rows;r++) M.board.push(Array(M.cols).fill(0));
+  }
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++) M.board[r][c]=(r*2+c)%M.gems.length;
+  const y=M.rows-1;
+  M.board[y][0]=0;M.board[y][1]=0;M.board[y][2]=1;M.board[y-1][2]=0;
+}
+function m3shuffle(){
+  const cells=[];
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++) cells.push(M.board[r][c]);
+  for(let n=0;n<40;n++){
+    for(let i=cells.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      const t=cells[i];cells[i]=cells[j];cells[j]=t;
+    }
+    let k=0;
+    for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++) M.board[r][c]=cells[k++];
+    m3res(true);
+    if(m3hasMove()) return;
+  }
+  m3seed();
+}
+function m3new(){
+  m3Token++;
+  M.score=0;M.moves=12;M.sel=null;M.hint=null;M.shuffled=false;M.board=[];
+  for(let n=0;n<40;n++){
+    M.board=[];
+    for(let r=0;r<M.rows;r++){
+      const row=[];
+      for(let c=0;c<M.cols;c++) row.push(Math.floor(Math.random()*M.gems.length));
+      M.board.push(row);
+    }
+    m3res(true);
+    if(m3hasMove()) return;
+  }
+  m3seed();
+}
+function m3swap(r1,c1,r2,c2){
+  const b=M.board,t=b[r1][c1];
+  b[r1][c1]=b[r2][c2];b[r2][c2]=t;
+  if(!Object.keys(m3find()).length){b[r1][c1]=b[r2][c2];b[r2][c2]=t;return false}
+  M.moves--;
+  m3res(false);
+  if(M.moves>0&&!m3hasMove()){m3shuffle();M.shuffled=true}
+  return true;
+}
+function m3markHint(){
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++){
+    if(c+1<M.cols&&m3try(r,c,r,c+1)){M.hint=[[r,c],[r,c+1]];M.sel=[r,c];return true}
+    if(r+1<M.rows&&m3try(r,c,r+1,c)){M.hint=[[r,c],[r+1,c]];M.sel=[r,c];return true}
+  }
+  M.hint=null;
+  return false;
+}
+function queueResult(){
+  const token=m3Token,score=M.score;
+  saveHi(score);
+  setTimeout(()=>{
+    if(token!==m3Token||cxCur().id!=='games') return;
+    pushFlow('result',{score});
+  },280);
+}
+function tapGem(r,c){
+  if(!M.board||M.moves<=0) return;
+  if(!M.sel){M.sel=[r,c];M.hint=null;renderConcept();return}
+  const d=Math.abs(M.sel[0]-r)+Math.abs(M.sel[1]-c);
+  if(d!==1){M.sel=d===0?null:[r,c];M.hint=null;renderConcept();return}
+  const [r1,c1]=M.sel;
+  M.sel=null;M.hint=null;
+  const hit=m3swap(r1,c1,r,c);
+  renderConcept();
+  if(!hit) return;
+  if(M.moves<=0) queueResult();
+  else if(M.shuffled){M.shuffled=false;cxToast('Нет ходов — перемешали')}
+}
+function askHint(){
+  if(M.moves<=0) return;
+  if(!m3markHint()){m3shuffle();cxToast('Нет ходов — перемешали');m3markHint()}
+  renderConcept();
+}
+function worldView(){
+  const plaza=el('div',{class:'cx-plaza'});
+  [
+    ['🛠️','Мастерская','left:8%;top:16%;background:#c47a2c','',showWorkshop],
+    ['🎮','Игры','right:8%;top:16%;background:#7a3fb0','',()=>showHub('games')],
+    ['🧥','Гардероб','background:#3d6fd8','mid',()=>showHub('wardrobe')]
+  ].forEach(([emoji,label,style,extra,go])=>{
+    plaza.append(el('button',{class:extra?'cx-spot '+extra:'cx-spot',type:'button',style,onclick:go},[el('span',{'aria-hidden':'true'},emoji),label]));
+  });
+  return el('div',{class:'cx-view','data-concept':'world'},[conceptHud(),plaza,bottomNav('world')]);
+}
+function gamesView(){
+  if(!M.board) m3new();
+  const grid=el('div',{class:'cx-grid',style:'grid-template-columns:repeat('+M.cols+',1fr)',role:'group','aria-label':'Поле'});
+  for(let r=0;r<M.rows;r++) for(let c=0;c<M.cols;c++){
+    const on=M.sel&&M.sel[0]===r&&M.sel[1]===c;
+    const hint=(M.hint||[]).some(p=>p[0]===r&&p[1]===c);
+    const gem=M.board[r][c];
+    grid.append(el('button',{
+      class:'cx-gem'+(hint?' cx-hint':''),
+      type:'button',
+      'aria-pressed':String(!!on),
+      'aria-label':GEM_NAME[gem]||'фишка',
+      onclick:()=>tapGem(r,c)
+    },M.gems[gem]||'•'));
+  }
+  return el('div',{class:'cx-view','data-concept':'games'},[
+    cxAppbar('Три в ряд',false),
+    el('div',{class:'cx-play'},[
+      el('div',{class:'cx-m3top'},[
+        el('div',{class:'cx-m3stat'},['Очки',el('b',{},String(M.score))]),
+        el('div',{class:'cx-m3stat'},['Ходы',el('b',{},String(M.moves))])
+      ]),
+      grid
+    ]),
+    el('div',{class:'cx-foot'},el('div',{class:'cx-footrow'},[
+      el('button',{class:'cx-cyan',type:'button',onclick:askHint},'Подсказка'),
+      el('button',{class:'cx-primary',type:'button',onclick(){m3new();renderConcept()}},'Заново')
+    ])),
+    bottomNav('games')
+  ]);
+}
+function resultView(){
+  const data=cxCur().data||{};
+  const score=Number.isFinite(data.score)?data.score:M.score;
+  const hi=loadHi();
+  const rows=hi.length
+    ? hi.map((n,i)=>el('div',{class:'cx-lb'},[el('span',{},(i===0?'👑 ':'')+(i+1)+'.'),el('span',{},String(n))]))
+    : [el('p',{class:'cx-note'},'Пока нет партий')];
+  return el('div',{class:'cx-view','data-concept':'result'},[
+    cxAppbar('Результат',false),
+    el('div',{class:'cx-scroll'},[
+      el('div',{class:'cx-hero-emoji','aria-hidden':'true'},'🏆'),
+      el('div',{class:'cx-card-block',style:'align-items:center'},[
+        el('div',{class:'cx-sub'},'Очки'),
+        el('div',{class:'cx-bignum',style:'color:#3a2270;font-size:40px'},String(score))
+      ]),
+      el('p',{class:'cx-note'},'Рекорды устройства · локальные'),
+      ...rows
+    ]),
+    el('div',{class:'cx-foot'},el('div',{class:'cx-footrow'},[
+      el('button',{class:'cx-primary',type:'button',onclick(){m3new();showHub('games')}},'Ещё раз'),
+      el('button',{class:'cx-cyan',type:'button',onclick(){showHub('home')}},'Домой')
+    ]))
+  ]);
+}
+const CX_VIEWS={home:homeView,wardrobe:wardrobeView,look:lookView,cart:cartView,delivery:deliveryView,confirm:confirmView,orders:ordersView,assembly:assemblyView,share:shareView,world:worldView,games:gamesView,result:resultView};
 function renderConcept(){
   const id=cxCur().id;
   document.body.dataset.screen=id;
   document.getElementById('cx-screen').replaceChildren((CX_VIEWS[id]||homeView)());
 }
 function showHub(id){
-  if(id==='world'||id==='games'){cxToast('недоступно');return}
-  if(id!=='home'&&id!=='wardrobe') return;
+  if(!CX_HUBS[id]) return;
+  if(id==='games'&&(!M.board||M.moves<=0)) m3new();
   cxStack=[{id,data:{}}];
   document.getElementById('concept').hidden=false;
   document.getElementById('cx-back').hidden=true;
@@ -1864,10 +2095,21 @@ function showWorkshop(){
   document.body.dataset.screen='workshop';
   document.getElementById('concept').hidden=true;
   const back=document.getElementById('cx-back');
-  const backTitle={home:'Дом',wardrobe:'Гардероб',look:'Мой мишка',cart:'Корзина',delivery:'Доставка',confirm:'Заявка',orders:'Заявки',assembly:'Лист',share:'Поделиться'};
+  const backTitle={home:'Дом',wardrobe:'Гардероб',world:'Мир',games:'Игры',look:'Мой мишка',cart:'Корзина',delivery:'Доставка',confirm:'Заявка',orders:'Заявки',assembly:'Лист',share:'Поделиться',result:'Результат'};
   back.hidden=false;
   back.textContent='‹ '+(backTitle[cur]||'Назад');
   relayout();
+}
+function jumpScreen(id){
+  closeAdmin();
+  if(id==='workshop'){showWorkshop();return}
+  if(CX_HUBS[id]){showHub(id);return}
+  const data={};
+  if(id==='result') data.score=M.board?M.score:0;
+  if(id==='confirm'||id==='assembly'){
+    try{const state=readOrders();if(state.orders&&state.orders[0]) data.orderId=state.orders[0].id}catch(e){}
+  }
+  pushFlow(id,data);
 }
 function closeAdmin(){const box=document.getElementById('cx-admin');box.hidden=true;box.replaceChildren()}
 function openAdmin(){
@@ -1884,6 +2126,12 @@ function openAdmin(){
       if(v&&!renderer){bearOn=false;applyFlags();cxToast('3D недоступно');return}
       bearOn=v;applyFlags();relayout();
     })]),
+    el('div',{class:'cx-sec'},'Карта экранов'),
+    el('div',{class:'cx-map'},[
+      ['home','Дом'],['workshop','Мастерская'],['wardrobe','Гардероб'],['look','Мой мишка'],
+      ['cart','Корзина'],['delivery','Доставка'],['confirm','Заявка собрана'],['orders','Заявки'],
+      ['assembly','Лист сборки'],['share','Поделиться'],['world','Мир'],['games','Три в ряд'],['result','Результат']
+    ].map(([id,label])=>el('button',{type:'button',onclick(){jumpScreen(id)}},label))),
     el('button',{class:'cx-primary',type:'button',onclick(){closeAdmin();showWorkshop()}},'Открыть конфигуратор')
   ]));
   box.hidden=false;
